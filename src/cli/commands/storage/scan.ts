@@ -29,7 +29,7 @@ export async function scan(request: AnkhCommandExecutionRequest): Promise<{ exit
     } else {
       for (const item of candidates) {
         request.context.writeStdout(
-          `${item.label}: ${item.estimatedBytes === null ? 'unknown size' : `${item.estimatedBytes} allocated bytes`} [${item.risk}] ${item.reason}\n`,
+          `${item.label} (${item.path ?? 'location unavailable'}): ${item.estimatedBytes === null ? 'unknown size' : `${item.estimatedBytes} allocated bytes`} [${item.risk}] ${item.reason}\n`,
         );
       }
     }

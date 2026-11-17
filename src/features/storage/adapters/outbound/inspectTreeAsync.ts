@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { lstat, readdir, realpath } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { join } from 'node:path';
 
@@ -18,7 +19,7 @@ export async function inspectTreeAsync(root: string): Promise<TreeInspection> {
       entries: 0,
       blockers: new Set<string>(),
     };
-    await inspectEntryAsync(root, rootStat, state);
+    await inspectEntryAsync(root, root, rootStat, state);
     const max = BigInt(Number.MAX_SAFE_INTEGER);
     if (state.bytes > max) state.blockers.add('allocated size exceeds safe integer range');
     return {
@@ -52,7 +53,12 @@ async function bigintStatAsync(path: string) {
 }
 
 /*** Walk a single entry without following links or silently ignoring failed reads. */
-async function inspectEntryAsync(path: string, entry: Stat, state: InspectionState): Promise<void> {
+async function inspectEntryAsync(
+  path: string,
+  logicalPath: string,
+  entry: Stat,
+  state: InspectionState,
+): Promise<void> {
   state.entries += 1;
   if (state.entries > 100_000) {
     state.blockers.add('inspection entry limit exceeded');
@@ -72,26 +78,55 @@ async function inspectEntryAsync(path: string, entry: Stat, state: InspectionSta
   }
   if (entry.isFile() && entry.nlink > 1n) state.blockers.add('hard-linked file');
   state.hash.update(
-    JSON.stringify([path, fingerprint(entry), String(entry.nlink), String(entry.blocks)]),
+    JSON.stringify([logicalPath, fingerprint(entry), String(entry.nlink), String(entry.blocks)]),
   );
   const key = `${entry.dev}:${entry.ino}`;
   if (state.inodes.has(key)) return;
   state.inodes.add(key);
   state.bytes += entry.blocks * 512n;
   if (!entry.isDirectory()) return;
+  await inspectDirectoryAsync(path, logicalPath, entry, state);
+}
+
+/*** Traverse an opened directory through its descriptor, rejecting replacement races. */
+async function inspectDirectoryAsync(
+  path: string,
+  logicalPath: string,
+  entry: Stat,
+  state: InspectionState,
+): Promise<void> {
   try {
-    const names = (await readdir(path)).sort();
-    for (const name of names) {
-      if (state.entries >= 100_000) {
-        state.blockers.add('inspection entry limit exceeded');
-        break;
+    const handle = await open(
+      path,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    );
+    try {
+      const opened = await handle.stat({ bigint: true });
+      if (opened.dev !== entry.dev || opened.ino !== entry.ino) {
+        state.blockers.add('tree changed during inspection');
+        return;
       }
-      const child = join(path, name);
-      await inspectEntryAsync(child, await bigintStatAsync(child), state);
+      const anchored = `/dev/fd/${handle.fd}`;
+      const names = (await readdir(anchored)).sort();
+      for (const name of names) {
+        if (state.entries >= 100_000) {
+          state.blockers.add('inspection entry limit exceeded');
+          break;
+        }
+        const child = join(anchored, name);
+        await inspectEntryAsync(
+          child,
+          join(logicalPath, name),
+          await bigintStatAsync(child),
+          state,
+        );
+      }
+      const after = await handle.stat({ bigint: true });
+      if (fingerprint(entry) !== fingerprint(after))
+        state.blockers.add('tree changed during inspection');
+    } finally {
+      await handle.close();
     }
-    const after = await bigintStatAsync(path);
-    if (fingerprint(entry) !== fingerprint(after))
-      state.blockers.add('tree changed during inspection');
   } catch (error) {
     state.blockers.add(describeError(error));
   }

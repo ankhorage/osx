@@ -2,6 +2,7 @@
 export interface StorageCandidate {
   readonly id: string;
   readonly label: string;
+  readonly path?: string;
   readonly estimatedBytes: number | null;
   readonly risk: 'safe' | 'report-only';
   readonly reason: string;

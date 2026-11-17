@@ -57,3 +57,15 @@ test('does not inspect through a linked parent directory', async () => {
   expect(result.allocatedBytes).toBeNull();
   expect(result.blockers).toContain('symbolic link in path');
 });
+
+test('uses a stable tree fingerprint and detects file changes', async () => {
+  const root = await fixture();
+  const file = join(root, 'cache');
+  await writeFile(file, 'one');
+  const first = await inspectTreeAsync(root);
+  const second = await inspectTreeAsync(root);
+  expect(first.fingerprint).not.toBeNull();
+  expect(second.fingerprint).toBe(first.fingerprint);
+  await writeFile(file, 'changed');
+  expect((await inspectTreeAsync(root)).fingerprint).not.toBe(first.fingerprint);
+});
