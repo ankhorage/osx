@@ -113,3 +113,69 @@ test('one failure does not hide the outcome of another approved candidate', asyn
     { id: 'b', status: 'cleaned' },
   ]);
 });
+
+test('ambiguous identifiers abort before any choice or execution', async () => {
+  const events: string[] = [];
+  const operations: StorageOperations = {
+    scan: async () => [candidates[0]!, candidates[0]!],
+    revalidate: async () => {
+      events.push('validate');
+      return true;
+    },
+    execute: async () => {
+      events.push('execute');
+    },
+    availableBytes: async () => 1,
+  };
+  const decisions: StorageDecisions = {
+    select: async () => {
+      events.push('select');
+      return true;
+    },
+    approve: async () => {
+      events.push('approve');
+      return true;
+    },
+  };
+  await expect(cleanStorageAsync(operations, decisions)).rejects.toThrow('Duplicate candidate');
+  expect(events).toEqual([]);
+});
+
+test('reports completed operations when the final disk measurement fails', async () => {
+  let calls = 0;
+  const operations: StorageOperations = {
+    scan: async () => [candidates[0]!],
+    revalidate: async () => true,
+    execute: async () => {},
+    availableBytes: async () => {
+      calls += 1;
+      if (calls === 2) throw new Error('statfs failed');
+      return 10;
+    },
+  };
+  const result = await cleanStorageAsync(operations, {
+    select: async () => true,
+    approve: async () => true,
+  });
+  expect(result.outcomes).toEqual([{ id: 'a', status: 'cleaned' }]);
+  expect(result.freeBytesAfter).toBeNull();
+});
+
+test('does not mutate when the initial free-space measurement is unavailable', async () => {
+  const events: string[] = [];
+  const operations: StorageOperations = {
+    scan: async () => [candidates[0]!],
+    revalidate: async () => {
+      events.push('validate');
+      return true;
+    },
+    execute: async () => {
+      events.push('execute');
+    },
+    availableBytes: async () => null,
+  };
+  await expect(
+    cleanStorageAsync(operations, { select: async () => true, approve: async () => true }),
+  ).rejects.toThrow('cleanup was not started');
+  expect(events).toEqual([]);
+});

@@ -11,20 +11,17 @@ export async function cleanStorageAsync(
   decisions: StorageDecisions,
   dryRun = false,
 ): Promise<StorageCleanupResult> {
-  const scanned = await operations.scan();
+  const scanned = (await operations.scan()).map((candidate) => Object.freeze({ ...candidate }));
+  if (new Set(scanned.map((candidate) => candidate.id)).size !== scanned.length) {
+    throw new Error('Duplicate candidate identifiers make the cleanup plan ambiguous.');
+  }
   const selected: StorageCandidate[] = [];
   for (const candidate of scanned) {
-    if (
-      candidate.risk === 'safe' &&
-      candidate.estimatedBytes !== null &&
-      Number.isSafeInteger(candidate.estimatedBytes) &&
-      candidate.estimatedBytes >= 0 &&
-      (await decisions.select(candidate))
-    ) {
+    if (isSelectable(candidate) && (await decisions.select(candidate))) {
       selected.push(candidate);
     }
   }
-  const approved = selected.length > 0 && (await decisions.approve(selected));
+  const approved = selected.length > 0 && (await decisions.approve(Object.freeze([...selected])));
   if (!approved || dryRun) {
     return {
       selected,
@@ -36,6 +33,9 @@ export async function cleanStorageAsync(
     };
   }
   const freeBytesBefore = await operations.availableBytes();
+  if (!isValidBytes(freeBytesBefore)) {
+    throw new Error('Available disk space is unknown; cleanup was not started.');
+  }
   const outcomes: { id: string; status: 'cleaned' | 'changed' | 'failed'; error?: string }[] = [];
   for (const candidate of selected) {
     try {
@@ -53,6 +53,23 @@ export async function cleanStorageAsync(
       });
     }
   }
-  const freeBytesAfter = await operations.availableBytes();
+  const freeBytesAfter = await operations.availableBytes().catch(() => null);
   return { selected, outcomes, approved, dryRun, freeBytesBefore, freeBytesAfter };
+}
+
+/*** Only fully identified, measured, explicitly safe candidates can be selected. */
+function isSelectable(candidate: StorageCandidate): boolean {
+  return (
+    candidate.risk === 'safe' &&
+    candidate.id.trim() !== '' &&
+    candidate.fingerprint.trim() !== '' &&
+    candidate.estimatedBytes !== null &&
+    Number.isSafeInteger(candidate.estimatedBytes) &&
+    candidate.estimatedBytes >= 0
+  );
+}
+
+/*** Require a finite, nonnegative integer disk measurement. */
+function isValidBytes(value: number | null): boolean {
+  return value !== null && Number.isSafeInteger(value) && value >= 0;
 }
