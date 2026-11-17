@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { realpath as canonicalPath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,7 +8,7 @@ import { emptyCacheAsync } from '../src/features/storage/adapters/outbound/empty
 import { inspectTreeAsync } from '../src/features/storage/adapters/outbound/inspectTreeAsync.js';
 
 test('empties only an unchanged inspected cache while preserving its root', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'osx-empty-'));
+  const root = await mkdtemp(join(await canonicalPath(tmpdir()), 'osx-empty-'));
   try {
     const cache = join(root, 'cache');
     await mkdir(join(cache, 'nested'), { recursive: true });
@@ -24,7 +25,7 @@ test('empties only an unchanged inspected cache while preserving its root', asyn
 });
 
 test('refuses a symlink swap after the scan and leaves the target untouched', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'osx-swap-'));
+  const root = await mkdtemp(join(await canonicalPath(tmpdir()), 'osx-swap-'));
   try {
     const cache = join(root, 'cache');
     const target = join(root, 'target');
@@ -44,7 +45,7 @@ test('refuses a symlink swap after the scan and leaves the target untouched', as
 });
 
 test('aborts if an approved file becomes a link during execution', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'osx-race-'));
+  const root = await mkdtemp(join(await canonicalPath(tmpdir()), 'osx-race-'));
   try {
     const cache = join(root, 'cache');
     const target = join(root, 'target');

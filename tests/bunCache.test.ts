@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { realpath as canonicalPath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -9,7 +10,7 @@ import type { BunCacheHost } from '../src/types/bunCache.js';
 
 /** Controlled fixture represents a macOS host without touching real caches. */
 async function setup() {
-  const home = await mkdtemp(join(tmpdir(), 'osx-bun-test-'));
+  const home = await mkdtemp(join(await canonicalPath(tmpdir()), 'osx-bun-test-'));
   const cache = join(home, '.bun', 'install', 'cache');
   await mkdir(cache, { recursive: true });
   await writeFile(join(cache, 'package'), 'cached package');

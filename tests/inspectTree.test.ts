@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { mkdtemp, mkdir, rm, symlink, writeFile, link } from 'node:fs/promises';
+import { realpath as canonicalPath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspectTreeAsync } from '../src/features/storage/adapters/outbound/inspectTreeAsync.js';
@@ -9,7 +10,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'osx-storage-'));
+  const root = await mkdtemp(join(await canonicalPath(tmpdir()), 'osx-storage-'));
   roots.push(root);
   return root;
 }

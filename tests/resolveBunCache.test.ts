@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { realpath as canonicalPath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolveBunCacheAsync } from '../src/features/storage/adapters/outbound/resolveBunCacheAsync.js';
 
 test('resolves the default cache and rejects unsafe overrides or unknown configuration', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'osx-bun-config-'));
+  const home = await mkdtemp(join(await canonicalPath(tmpdir()), 'osx-bun-config-'));
   try {
     const cwd = join(home, 'project');
     await mkdir(cwd);
