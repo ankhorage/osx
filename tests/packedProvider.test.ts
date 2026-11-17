@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { discoverAnkhPackages, loadProviderManifests } from '@ankhorage/ankh';
+import { discoverAnkhPackages, loadProviderManifests, runCli } from '@ankhorage/ankh';
 
 test('packed provider is discovered and loaded by the released Ankh API', async () => {
   const temp = await mkdtemp(join(tmpdir(), 'osx-packed-'));
@@ -35,6 +35,35 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       'storage',
       'scan',
     ]);
+    const output: string[] = [];
+    const errors: string[] = [];
+    const context = {
+      cwd: extracted,
+      env: { HOME: temp },
+      version: 'test',
+      writeStdout: (text: string) => {
+        output.push(text);
+      },
+      writeStderr: (text: string) => {
+        errors.push(text);
+      },
+    };
+    const options = {
+      context,
+      discoverPackages: async () => ({ packages: ours, diagnostics: [] }),
+    };
+    const help = await runCli(['osx', '--help'], options);
+    expect(help.exitCode).toBe(0);
+    expect(output.join('')).toContain('storage scan');
+    output.length = 0;
+    const scan = await runCli(['osx', 'storage', 'scan', '--json'], options);
+    if (process.platform === 'darwin') {
+      expect(scan.exitCode).toBe(0);
+      expect(JSON.parse(output.join('')).candidates).toBeArray();
+    } else {
+      expect(scan.exitCode).toBe(1);
+      expect(errors.join('')).toContain('only on macOS');
+    }
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
