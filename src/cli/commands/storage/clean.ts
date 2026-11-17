@@ -2,9 +2,8 @@ import { realpath } from 'node:fs/promises';
 
 import type { AnkhCommandExecutionRequest, AnkhCommandInteraction } from '@ankhorage/ankh';
 
-import { createBunCacheHost } from '../../../features/storage/adapters/outbound/createBunCacheHost.js';
-import { createBunCacheOperations } from '../../../features/storage/adapters/outbound/createBunCacheOperations.js';
 import { cleanStorageAsync } from '../../../features/storage/application/cleanStorageAsync.js';
+import { createDefaultBunCacheOperations } from '../../../features/storage/composition/createDefaultBunCacheOperations.js';
 import type { StorageCleanupResult, StorageDecisions } from '../../../types/storage.js';
 
 /*** Collect per-cache decisions and a final confirmation before any cleanup. */
@@ -46,8 +45,10 @@ async function runCleanupAsync(
   home: string,
 ): Promise<{ exitCode: number }> {
   const { context } = request;
-  const operations = createBunCacheOperations(
-    createBunCacheHost(await realpath(home), context.cwd, context.env),
+  const operations = createDefaultBunCacheOperations(
+    await realpath(home),
+    context.cwd,
+    context.env,
   );
   const scanned = await operations.scan();
   for (const item of scanned)
