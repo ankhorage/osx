@@ -1,0 +1,26 @@
+name: macOS storage fixtures
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/macos-storage.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixtures:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun test tests/inspectTree.test.ts tests/emptyCache.test.ts tests/bunCache.test.ts tests/cacheLock.test.ts tests/resolveBunCache.test.ts

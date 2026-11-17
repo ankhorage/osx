@@ -55,6 +55,7 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     const help = await runCli(['osx', '--help'], options);
     expect(help.exitCode).toBe(0);
     expect(output.join('')).toContain('storage scan');
+    expect(output.join('')).toContain('storage clean');
     output.length = 0;
     const scan = await runCli(['osx', 'storage', 'scan', '--json'], options);
     if (process.platform === 'darwin') {
@@ -62,6 +63,10 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       expect(JSON.parse(output.join('')).candidates).toBeArray();
     } else {
       expect(scan.exitCode).toBe(1);
+      expect(errors.join('')).toContain('only on macOS');
+      errors.length = 0;
+      const clean = await runCli(['osx', 'storage', 'clean', '--dry-run'], options);
+      expect(clean.exitCode).toBe(1);
       expect(errors.join('')).toContain('only on macOS');
     }
   } finally {

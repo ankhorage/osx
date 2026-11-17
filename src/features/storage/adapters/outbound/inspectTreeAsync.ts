@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, open, readdir, realpath } from 'node:fs/promises';
+import { access, lstat, open, readdir, realpath } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { join } from 'node:path';
 
 /*** Inspect allocated bytes without following links or crossing filesystems; incomplete trees are blocked. */
-export async function inspectTreeAsync(root: string): Promise<TreeInspection> {
+export async function inspectTreeAsync(
+  root: string,
+  options: { requireWritable?: boolean } = {},
+): Promise<TreeInspection> {
   try {
     const rootStat = await lstat(root, { bigint: true });
     if ((await realpath(root)) !== resolve(root)) {
@@ -13,7 +16,9 @@ export async function inspectTreeAsync(root: string): Promise<TreeInspection> {
     }
     const state: InspectionState = {
       device: rootStat.dev,
+      requireWritable: options.requireWritable === true,
       inodes: new Set<string>(),
+      entriesByPath: new Map<string, string>(),
       hash: createHash('sha256'),
       bytes: 0n,
       entries: 0,
@@ -26,6 +31,7 @@ export async function inspectTreeAsync(root: string): Promise<TreeInspection> {
       allocatedBytes: state.blockers.size === 0 ? Number(state.bytes) : null,
       blockers: [...state.blockers].sort(),
       fingerprint: state.blockers.size === 0 ? state.hash.digest('hex') : null,
+      ...(state.blockers.size === 0 ? { entriesByPath: state.entriesByPath } : {}),
     };
   } catch (error) {
     return { allocatedBytes: null, blockers: [describeError(error)], fingerprint: null };
@@ -35,7 +41,9 @@ export async function inspectTreeAsync(root: string): Promise<TreeInspection> {
 type Stat = Awaited<ReturnType<typeof bigintStatAsync>>;
 interface InspectionState {
   readonly device: bigint;
+  readonly requireWritable: boolean;
   readonly inodes: Set<string>;
+  readonly entriesByPath: Map<string, string>;
   readonly hash: ReturnType<typeof createHash>;
   bytes: bigint;
   entries: number;
@@ -45,6 +53,7 @@ interface TreeInspection {
   readonly allocatedBytes: number | null;
   readonly blockers: readonly string[];
   readonly fingerprint: string | null;
+  readonly entriesByPath?: ReadonlyMap<string, string>;
 }
 
 /*** Obtain bigint metadata so filesystem identifiers and allocated size remain precise. */
@@ -77,6 +86,7 @@ async function inspectEntryAsync(
     return;
   }
   if (entry.isFile() && entry.nlink > 1n) state.blockers.add('hard-linked file');
+  state.entriesByPath.set(logicalPath, fingerprint(entry));
   state.hash.update(
     JSON.stringify([logicalPath, fingerprint(entry), String(entry.nlink), String(entry.blocks)]),
   );
@@ -107,6 +117,7 @@ async function inspectDirectoryAsync(
         return;
       }
       const anchored = `/dev/fd/${handle.fd}`;
+      if (state.requireWritable) await access(anchored, constants.W_OK | constants.X_OK);
       const names = (await readdir(anchored)).sort();
       for (const name of names) {
         if (state.entries >= 100_000) {

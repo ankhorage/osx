@@ -23,7 +23,10 @@ export async function scan(request: AnkhCommandExecutionRequest): Promise<{ exit
     return { exitCode: 1 };
   }
   try {
-    const candidates = await scanStorageAsync(await realpath(home));
+    const candidates = await scanStorageAsync(await realpath(home), {
+      cwd: request.context.cwd,
+      env: request.context.env,
+    });
     if (request.argv.includes('--json')) {
       request.context.writeStdout(`${JSON.stringify({ candidates }, null, 2)}\n`);
     } else {

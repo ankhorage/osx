@@ -1,10 +1,18 @@
 import { join } from 'node:path';
 
 import type { StorageCandidate } from '../../../types/storage.js';
+import { createBunCacheHost } from '../adapters/outbound/createBunCacheHost.js';
+import { createBunCacheOperations } from '../adapters/outbound/createBunCacheOperations.js';
 import { inspectTreeAsync } from '../adapters/outbound/inspectTreeAsync.js';
 
 /*** Inspect known user-owned cache and high-risk paths without changing them. */
-export async function scanStorageAsync(home: string): Promise<readonly StorageCandidate[]> {
+export async function scanStorageAsync(
+  home: string,
+  options: { cwd: string; env: Readonly<Record<string, string | undefined>> } = {
+    cwd: process.cwd(),
+    env: process.env,
+  },
+): Promise<readonly StorageCandidate[]> {
   const definitions = storagePaths(home);
   const inspections = await Promise.all(
     definitions.map(async (definition) => ({
@@ -12,24 +20,29 @@ export async function scanStorageAsync(home: string): Promise<readonly StorageCa
       inspection: await inspectTreeAsync(definition.path),
     })),
   );
-  return inspections.map(({ definition, inspection }) => ({
-    id: definition.id,
-    label: definition.label,
-    path: definition.path,
-    estimatedBytes: inspection.allocatedBytes,
-    risk: 'report-only',
-    reason:
-      inspection.blockers.length > 0
-        ? inspection.blockers.join(', ')
-        : 'Cleanup adapter not yet verified',
-    fingerprint: inspection.fingerprint ?? '',
-  }));
+  const bun = await createBunCacheOperations(
+    createBunCacheHost(home, options.cwd, options.env),
+  ).scan();
+  return [
+    ...bun,
+    ...inspections.map(({ definition, inspection }) => ({
+      id: definition.id,
+      label: definition.label,
+      path: definition.path,
+      estimatedBytes: inspection.allocatedBytes,
+      risk: 'report-only' as const,
+      reason:
+        inspection.blockers.length > 0
+          ? inspection.blockers.join(', ')
+          : 'Cleanup adapter not yet verified',
+      fingerprint: inspection.fingerprint ?? '',
+    })),
+  ];
 }
 
 /*** Define independent user-owned paths; none is an ancestor of another. */
 function storagePaths(home: string) {
   return [
-    { id: 'bun-cache', label: 'Bun package cache', path: join(home, '.bun', 'install', 'cache') },
     { id: 'npm-cache', label: 'npm package cache', path: join(home, '.npm', '_cacache') },
     { id: 'gradle-cache', label: 'Gradle cache', path: join(home, '.gradle', 'caches') },
     {

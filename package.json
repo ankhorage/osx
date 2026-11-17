@@ -75,6 +75,20 @@
     "provider": "./dist/cli/index.js",
     "capabilities": [
       {
+        "id": "osx.storage.clean",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "Clean storage"
+      },
+      {
         "id": "osx.storage.scan",
         "owner": "@ankhorage/osx",
         "access": [
