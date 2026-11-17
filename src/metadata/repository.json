@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "kind": "tooling",
+  "title": "@ankhorage/osx",
+  "summary": "Local macOS diagnostics and maintenance provider for Ankh.",
+  "purpose": "Provide a standalone, safety-oriented interface for inspecting and maintaining a macOS host.",
+  "constraints": {
+    "platforms": ["macOS"],
+    "security": ["Host changes require explicit user approval."]
+  }
+}

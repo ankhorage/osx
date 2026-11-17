@@ -1,0 +1,65 @@
+{
+  "name": "@ankhorage/osx",
+  "version": "0.1.0",
+  "description": "Local macOS diagnostics and maintenance provider for Ankh.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ankhorage/osx.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@ankhorage/devtools": "^2.8.3",
+    "@ankhorage/doctor": "^0.14.36",
+    "@ankhorage/paradox": "^0.5.0",
+    "@types/bun": "^1.4.2",
+    "@types/node": "^26.6.6",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "lint": "ankhorage-eslint . --max-warnings=0",
+    "lint:fix": "ankhorage-eslint . --fix --max-warnings=0",
+    "format": "ankhorage-prettier --write .",
+    "format:check": "ankhorage-prettier --check .",
+    "knip:check": "ankhorage-knip",
+    "build": "bun x tsc -p tsconfig.build.json",
+    "typecheck": "bun x tsc --noEmit -p tsconfig.json",
+    "check-types": "bun run typecheck",
+    "test": "bun test --pass-with-no-tests",
+    "docs": "paradox && ankhorage-prettier --write README.md paradox",
+    "changeset": "ankhorage-changeset",
+    "changeset:status": "ankhorage-changeset status --since=origin/main",
+    "version-packages": "ankhorage-changeset version"
+  },
+  "packageManager": "bun@1.4.2",
+  "homepage": "https://github.com/ankhorage/osx#readme",
+  "bugs": {
+    "url": "https://github.com/ankhorage/osx/issues"
+  },
+  "keywords": [
+    "ankhorage",
+    "macos",
+    "cli",
+    "typescript",
+    "bun"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "sideEffects": false
+}
