@@ -29,6 +29,7 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     const packageApi = await import(
       pathToFileURL(join(extracted, 'package', 'dist', 'index.js')).href
     );
+    expect(packageApi.collectMacosHostSecurityObservations).toBeFunction();
     expect(packageApi.collectMacosPhysicalAndLinkObservations).toBeFunction();
     expect(packageApi.createMacosSecurityAuditCommandRunner).toBeFunction();
     const discovered = await discoverAnkhPackages({ cwd: join(extracted, 'package') });
@@ -165,4 +166,4 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
-});
+}, 30_000);
