@@ -101,6 +101,34 @@
           ]
         },
         "label": "Inspect storage"
+      },
+      {
+        "id": "osx.storage.orphans.clean",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "Clean orphaned application remnants"
+      },
+      {
+        "id": "osx.storage.orphans.scan",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "Inspect orphaned application remnants"
       }
     ]
   }

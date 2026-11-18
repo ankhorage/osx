@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 import type { StorageCandidate, StorageOperations } from '../../../types/storage.js';
 import { inspectTreeAsync } from '../adapters/outbound/inspectTreeAsync.js';
@@ -18,21 +18,42 @@ export async function scanStorageAsync(
   const adapterCandidates = (
     await Promise.all(operations.map(async (operation) => await operation.scan()))
   ).flat();
+  const genericCandidates = inspections.map(({ definition, inspection }) => ({
+    id: definition.id,
+    label: definition.label,
+    path: definition.path,
+    estimatedBytes: inspection.allocatedBytes,
+    risk: 'report-only' as const,
+    reason:
+      inspection.blockers.length > 0
+        ? inspection.blockers.join(', ')
+        : 'Cleanup adapter not yet verified',
+    fingerprint: inspection.fingerprint ?? '',
+  }));
   return [
     ...adapterCandidates,
-    ...inspections.map(({ definition, inspection }) => ({
-      id: definition.id,
-      label: definition.label,
-      path: definition.path,
-      estimatedBytes: inspection.allocatedBytes,
-      risk: 'report-only' as const,
-      reason:
-        inspection.blockers.length > 0
-          ? inspection.blockers.join(', ')
-          : 'Cleanup adapter not yet verified',
-      fingerprint: inspection.fingerprint ?? '',
-    })),
+    ...genericCandidates.filter(
+      (candidate) =>
+        !adapterCandidates.some(
+          (adapter) =>
+            adapter.id.startsWith('orphaned-application:') &&
+            adapter.path &&
+            pathsOverlap(candidate.path, adapter.path),
+        ),
+    ),
   ];
+}
+
+/** Prevent the aggregate view from summing a detailed orphan observation and its generic ancestor. */
+function pathsOverlap(left: string | undefined, right: string): boolean {
+  if (!left) return false;
+  const leftRelative = relative(left, right);
+  const rightRelative = relative(right, left);
+  return (
+    leftRelative === '' ||
+    rightRelative === '' ||
+    (!leftRelative.startsWith('..') && !rightRelative.startsWith('..'))
+  );
 }
 
 /*** Define independent user-owned paths; none is an ancestor of another. */

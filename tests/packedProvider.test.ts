@@ -35,6 +35,11 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       'storage',
       'scan',
     ]);
+    expect(loaded.providers[0]?.manifest.commands.map((command) => command.path)).toContainEqual([
+      'storage',
+      'orphans',
+      'scan',
+    ]);
     const output: string[] = [];
     const errors: string[] = [];
     const context = {
@@ -56,6 +61,7 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(help.exitCode).toBe(0);
     expect(output.join('')).toContain('storage scan');
     expect(output.join('')).toContain('storage clean');
+    expect(output.join('')).toContain('storage orphans scan');
     output.length = 0;
     const scan = await runCli(['osx', 'storage', 'scan', '--json'], options);
     if (process.platform === 'darwin') {
