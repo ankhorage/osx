@@ -5,6 +5,7 @@ import packageJson from '../../package.json';
 import { audit } from './commands/security/audit.js';
 import { list } from './commands/security/controls/list.js';
 import { clean } from './commands/storage/clean.js';
+import { scan as scanOrphans } from './commands/storage/orphans/scan.js';
 import { scan } from './commands/storage/scan.js';
 
 const capabilities = [
@@ -21,6 +22,13 @@ const capabilities = [
     access: ['invoke'],
     binding: { kind: 'action', bindableAs: ['target'] },
     label: 'Inspect storage',
+  },
+  {
+    id: 'osx.storage.orphans.scan',
+    owner: '@ankhorage/osx',
+    access: ['invoke'],
+    binding: { kind: 'action', bindableAs: ['target'] },
+    label: 'Inspect orphaned application remnants',
   },
   {
     id: 'osx.security.audit',
@@ -51,6 +59,11 @@ const provider = {
       summary: 'Clean selected caches after confirmation.',
     },
     {
+      path: ['storage', 'orphans', 'scan'],
+      capability: 'osx.storage.orphans.scan',
+      summary: 'Inspect orphaned application remnants.',
+    },
+    {
       path: ['security', 'audit'],
       capability: 'osx.security.audit',
       summary: 'Report the read-only security-audit coverage and results.',
@@ -64,6 +77,7 @@ const provider = {
   handlers: [
     { path: ['storage', 'scan'], handler: scan },
     { path: ['storage', 'clean'], handler: clean },
+    { path: ['storage', 'orphans', 'scan'], handler: scanOrphans },
     { path: ['security', 'audit'], handler: audit },
     { path: ['security', 'controls', 'list'], handler: list },
   ],

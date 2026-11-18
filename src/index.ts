@@ -5,6 +5,7 @@ export { createDefaultSecurityAuditReport } from './features/security-audit/comp
 export { createSecurityAuditCatalog } from './features/security-audit/domain/createSecurityAuditCatalog.js';
 export { createSecurityAuditProfile } from './features/security-audit/domain/createSecurityAuditProfile.js';
 export { cleanStorageAsync } from './features/storage/application/cleanStorageAsync.js';
+export { scanOrphanedApplicationsAsync } from './features/storage/application/scanOrphanedApplicationsAsync.js';
 export { scanStorageAsync } from './features/storage/composition/scanStorageAsync.js';
 export type {
   SecurityAuditApplicability,
@@ -28,6 +29,12 @@ export type {
   SecurityAuditResult,
   SecurityAuditSeverity,
 } from './types/securityAudit.js';
+export type {
+  OrphanedApplicationEvidenceAvailability,
+  OrphanedApplicationEvidenceSource,
+  OrphanedApplicationHost,
+  OrphanedApplicationObservation,
+} from './types/orphanedApplications.js';
 export type {
   StorageCandidate,
   StorageCleanupResult,

@@ -103,7 +103,7 @@
         "label": "Inspect storage"
       },
       {
-        "id": "osx.security.audit",
+        "id": "osx.storage.orphans.scan",
         "owner": "@ankhorage/osx",
         "access": [
           "invoke"
@@ -114,7 +114,7 @@
             "target"
           ]
         },
-        "label": "Audit macOS security posture"
+        "label": "Inspect orphaned application remnants"
       },
       {
         "id": "osx.security.controls.list",
