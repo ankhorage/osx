@@ -45,7 +45,7 @@ test('only facts satisfying the control-owned baseline predicate may pass', () =
   expect(result.coverage).toBe('implemented');
   expect(result.baseline).toEqual({
     profileId: profile.id,
-    expectedSecureCondition: 'No externally reachable TCP listeners were observed.',
+    expectedSecureCondition: 'No non-loopback-bound TCP listeners were observed.',
     status: 'verified',
     evidenceIds: ['listener-summary'],
   });
@@ -85,7 +85,7 @@ test('catalog controls stay unsupported when no control-specific collector and p
 test('baseline violations derive failure severity and keep cross-layer coverage primary-only', () => {
   const report = runSecurityAudit(controlsWithPredicate(), profile, [
     observation({
-      evidence: [evidence({ facts: [{ id: 'no-external-tcp-listeners', value: false }] })],
+      evidence: [evidence({ facts: [{ id: 'no-non-loopback-tcp-listeners', value: false }] })],
     }),
   ]);
   const result = findControl(report, controlId);
@@ -117,8 +117,11 @@ test('missing, blocked, contradictory, and unknown applicability evidence fail c
     runSecurityAudit(controlsWithPredicate(), profile, [
       observation({
         evidence: [
-          evidence({ id: 'secure', facts: [{ id: 'no-external-tcp-listeners', value: true }] }),
-          evidence({ id: 'insecure', facts: [{ id: 'no-external-tcp-listeners', value: false }] }),
+          evidence({ id: 'secure', facts: [{ id: 'no-non-loopback-tcp-listeners', value: true }] }),
+          evidence({
+            id: 'insecure',
+            facts: [{ id: 'no-non-loopback-tcp-listeners', value: false }],
+          }),
         ],
       }),
     ]),
@@ -306,7 +309,7 @@ function evidence(overrides: Partial<SecurityAuditEvidence> = {}): SecurityAudit
     summary: 'Redacted listener metadata was observed.',
     collectedAt: '2026-11-18T00:00:00.000Z',
     redacted: true,
-    facts: [{ id: 'no-external-tcp-listeners', value: true }],
+    facts: [{ id: 'no-non-loopback-tcp-listeners', value: true }],
     ...overrides,
   };
 }
@@ -332,10 +335,10 @@ function controlsWithPredicate() {
           baselines: [
             {
               profileId: profile.id,
-              expectedSecureCondition: 'No externally reachable TCP listeners were observed.',
+              expectedSecureCondition: 'No non-loopback-bound TCP listeners were observed.',
               predicate: {
                 kind: 'all-boolean-facts' as const,
-                facts: [{ id: 'no-external-tcp-listeners', value: true }],
+                facts: [{ id: 'no-non-loopback-tcp-listeners', value: true }],
               },
               failureSeverity: 'medium' as const,
             },
