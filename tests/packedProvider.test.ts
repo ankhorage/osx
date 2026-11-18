@@ -49,6 +49,10 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(
       loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id),
     ).not.toContain('osx.storage.orphans.clean');
+    expect(loaded.providers[0]?.manifest.commands.map((command) => command.path)).toContainEqual([
+      'security',
+      'audit',
+    ]);
     const output: string[] = [];
     const errors: string[] = [];
     const context = {
@@ -70,6 +74,8 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(help.exitCode).toBe(0);
     expect(output.join('')).toContain('storage scan');
     expect(output.join('')).toContain('storage clean');
+    expect(output.join('')).toContain('security audit');
+    expect(output.join('')).toContain('security controls list');
     expect(output.join('')).toContain('storage orphans scan');
     expect(output.join('')).not.toContain('storage orphans clean');
     output.length = 0;
@@ -82,6 +88,21 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       expect(errors.join('')).toContain('only on macOS');
       errors.length = 0;
     }
+    output.length = 0;
+    const audit = await runCli(
+      ['osx', 'security', 'audit', '--non-interactive', '--json'],
+      options,
+    );
+    expect(audit.exitCode).toBe(0);
+    expect(
+      JSON.parse(output.join('')).results.every(
+        (result: { coverage: string }) => result.coverage === 'unsupported',
+      ),
+    ).toBe(true);
+    output.length = 0;
+    const controls = await runCli(['osx', 'security', 'controls', 'list', '--json'], options);
+    expect(controls.exitCode).toBe(0);
+    expect(JSON.parse(output.join('')).controls).toHaveLength(17);
     output.length = 0;
     const scan = await runCli(['osx', 'storage', 'scan', '--json'], options);
     if (process.platform === 'darwin') {

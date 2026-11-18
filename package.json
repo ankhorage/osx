@@ -115,6 +115,34 @@
           ]
         },
         "label": "Inspect orphaned application remnants"
+      },
+      {
+        "id": "osx.security.audit",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "Audit macOS security posture"
+      },
+      {
+        "id": "osx.security.controls.list",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "List macOS security controls"
       }
     ]
   }
