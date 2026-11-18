@@ -27,7 +27,8 @@ test('default security audit is deterministic and explicitly incomplete', () => 
       (result) =>
         result.outcome === 'unknown' &&
         result.coverage === 'unsupported' &&
-        result.baseline.status === 'profile-incompatible',
+        (result.baseline.status === 'profile-incompatible' ||
+          result.baseline.status === 'missing-evidence'),
     ),
   ).toBe(true);
   expect(report.coverage.osi[1].unsupported).toBe(1);
@@ -51,7 +52,7 @@ test('only facts satisfying the control-owned baseline predicate may pass', () =
   });
 });
 
-test('catalog controls stay unsupported when no control-specific collector and predicate exist', () => {
+test('catalog baselines remain narrowly limited to independently collected startup and disk facts', () => {
   const controls = createSecurityAuditCatalog();
   const report = runSecurityAudit(
     controls,
@@ -71,14 +72,18 @@ test('catalog controls stay unsupported when no control-specific collector and p
     })),
   );
 
-  expect(controls.every((control) => control.baselines.length === 0)).toBe(true);
   expect(
-    report.results.every(
-      (result) =>
-        result.outcome === 'unknown' &&
-        result.coverage === 'unsupported' &&
-        result.baseline.status === 'profile-incompatible',
-    ),
+    controls.filter((control) => control.baselines.length > 0).map((control) => control.id),
+  ).toEqual(['cross-layer-hardware-startup-trust', 'cross-layer-disk-data']);
+  expect(
+    report.results
+      .filter((result) => result.control.baselines.length === 0)
+      .every(
+        (result) =>
+          result.outcome === 'unknown' &&
+          result.coverage === 'unsupported' &&
+          result.baseline.status === 'profile-incompatible',
+      ),
   ).toBe(true);
 });
 

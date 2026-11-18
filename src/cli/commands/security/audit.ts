@@ -3,6 +3,7 @@ import type { AnkhCommandExecutionRequest } from '@ankhorage/ankh';
 import { filterSecurityAuditReport } from '../../../features/security-audit/application/filterSecurityAuditReport.js';
 import { serializeSecurityAuditReport } from '../../../features/security-audit/application/serializeSecurityAuditReport.js';
 import { createDefaultSecurityAuditReport } from '../../../features/security-audit/composition/createDefaultSecurityAuditReport.js';
+import { createMacosSecurityAuditReportAsync } from '../../../features/security-audit/composition/createMacosSecurityAuditReportAsync.js';
 import type { SecurityAuditReport, SecurityAuditResult } from '../../../types/securityAudit.js';
 
 /*** Run the read-only security audit as deterministic JSON or an explicitly skippable guided review. */
@@ -14,7 +15,7 @@ export async function audit(request: AnkhCommandExecutionRequest): Promise<{ exi
     );
     return { exitCode: 1 };
   }
-  const report = filterReport(createDefaultSecurityAuditReport(), options);
+  const report = filterReport(await createMacosSecurityAuditReportAsync(), options);
   if (options.nonInteractive) {
     request.context.writeStdout(serializeSecurityAuditReport(report));
     return { exitCode: 0 };

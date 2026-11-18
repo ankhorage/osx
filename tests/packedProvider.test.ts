@@ -140,9 +140,16 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       options,
     );
     expect(audit.exitCode).toBe(0);
+    const auditReport = JSON.parse(output.join('')) as {
+      readonly results: readonly {
+        readonly outcome: string;
+        readonly evidence: readonly unknown[];
+      }[];
+    };
+    expect(auditReport.results).toHaveLength(17);
     expect(
-      JSON.parse(output.join('')).results.every(
-        (result: { coverage: string }) => result.coverage === 'unsupported',
+      auditReport.results.every(
+        (result) => result.outcome !== 'pass' || result.evidence.length > 0,
       ),
     ).toBe(true);
     output.length = 0;
@@ -170,7 +177,7 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     const controls = await runCli(['osx', 'security', 'controls', 'list', '--json'], options);
     expect(controls.exitCode).toBe(0);
     expect(JSON.parse(output.join('')).controls).toHaveLength(17);
-    expect(JSON.parse(output.join('')).controls[0].coverage).toBe('unsupported');
+    expect(JSON.parse(output.join('')).controls[0].collector).toBe('present');
     output.length = 0;
     const aborted = await runCli(['osx', 'security', 'audit'], {
       ...options,

@@ -6,9 +6,11 @@ export {
   type MacosSecurityAuditCommandResult,
   type MacosSecurityAuditCommandRunner,
 } from './features/security-audit/adapters/outbound/createMacosSecurityAuditCommandRunner.js';
+export { createSecurityNetworkAuditObservations } from './features/security-audit/application/createSecurityNetworkAuditObservations.js';
 export { runSecurityAudit } from './features/security-audit/application/runSecurityAudit.js';
 export { serializeSecurityAuditReport } from './features/security-audit/application/serializeSecurityAuditReport.js';
 export { createDefaultSecurityAuditReport } from './features/security-audit/composition/createDefaultSecurityAuditReport.js';
+export { createMacosSecurityAuditReportAsync } from './features/security-audit/composition/createMacosSecurityAuditReportAsync.js';
 export {
   createMacosHostSecuritySupportMatrix,
   type MacosHostSecuritySupport,
