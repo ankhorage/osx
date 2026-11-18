@@ -40,6 +40,15 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       'orphans',
       'scan',
     ]);
+    expect(
+      loaded.providers[0]?.manifest.commands.map((command) => command.path),
+    ).not.toContainEqual(['storage', 'orphans', 'clean']);
+    expect(loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id)).toContain(
+      'osx.storage.orphans.scan',
+    );
+    expect(
+      loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id),
+    ).not.toContain('osx.storage.orphans.clean');
     const output: string[] = [];
     const errors: string[] = [];
     const context = {
@@ -62,11 +71,18 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(output.join('')).toContain('storage scan');
     expect(output.join('')).toContain('storage clean');
     expect(output.join('')).toContain('storage orphans scan');
+    expect(output.join('')).not.toContain('storage orphans clean');
     output.length = 0;
-    const orphanClean = await runCli(['osx', 'storage', 'orphans', 'clean'], options);
-    expect(orphanClean.exitCode).toBe(1);
-    expect(errors.join('')).toContain('safe reversible Trash adapter');
-    errors.length = 0;
+    const orphanScan = await runCli(['osx', 'storage', 'orphans', 'scan', '--json'], options);
+    if (process.platform === 'darwin') {
+      expect(orphanScan.exitCode).toBe(0);
+      expect(JSON.parse(output.join('')).applications).toBeArray();
+    } else {
+      expect(orphanScan.exitCode).toBe(1);
+      expect(errors.join('')).toContain('only on macOS');
+      errors.length = 0;
+    }
+    output.length = 0;
     const scan = await runCli(['osx', 'storage', 'scan', '--json'], options);
     if (process.platform === 'darwin') {
       expect(scan.exitCode).toBe(0);
