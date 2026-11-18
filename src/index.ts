@@ -7,10 +7,12 @@ export type {
   OrphanedApplicationEvidenceSource,
   OrphanedApplicationHost,
   OrphanedApplicationObservation,
+  OrphanedApplicationPathInspection,
 } from './types/orphanedApplications.js';
 export type {
   StorageCandidate,
   StorageCleanupResult,
   StorageDecisions,
+  StorageExecution,
   StorageOperations,
 } from './types/storage.js';

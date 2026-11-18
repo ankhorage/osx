@@ -40,15 +40,17 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       'orphans',
       'scan',
     ]);
-    expect(
-      loaded.providers[0]?.manifest.commands.map((command) => command.path),
-    ).not.toContainEqual(['storage', 'orphans', 'clean']);
+    expect(loaded.providers[0]?.manifest.commands.map((command) => command.path)).toContainEqual([
+      'storage',
+      'orphans',
+      'clean',
+    ]);
     expect(loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id)).toContain(
       'osx.storage.orphans.scan',
     );
-    expect(
-      loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id),
-    ).not.toContain('osx.storage.orphans.clean');
+    expect(loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id)).toContain(
+      'osx.storage.orphans.clean',
+    );
     const output: string[] = [];
     const errors: string[] = [];
     const context = {
@@ -71,7 +73,7 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(output.join('')).toContain('storage scan');
     expect(output.join('')).toContain('storage clean');
     expect(output.join('')).toContain('storage orphans scan');
-    expect(output.join('')).not.toContain('storage orphans clean');
+    expect(output.join('')).toContain('storage orphans clean');
     output.length = 0;
     const orphanScan = await runCli(['osx', 'storage', 'orphans', 'scan', '--json'], options);
     if (process.platform === 'darwin') {
@@ -94,8 +96,15 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       const clean = await runCli(['osx', 'storage', 'clean', '--dry-run'], options);
       expect(clean.exitCode).toBe(1);
       expect(errors.join('')).toContain('only on macOS');
+      errors.length = 0;
+      const orphanClean = await runCli(
+        ['osx', 'storage', 'orphans', 'clean', '--dry-run'],
+        options,
+      );
+      expect(orphanClean.exitCode).toBe(1);
+      expect(errors.join('')).toContain('only on macOS');
     }
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
-});
+}, 30_000);

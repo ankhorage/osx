@@ -115,6 +115,20 @@
           ]
         },
         "label": "Inspect orphaned application remnants"
+      },
+      {
+        "id": "osx.storage.orphans.clean",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "Move verified orphaned application remnants to Trash"
       }
     ]
   }

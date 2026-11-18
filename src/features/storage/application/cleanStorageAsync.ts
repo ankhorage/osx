@@ -42,8 +42,8 @@ export async function cleanStorageAsync(
       if (!(await operations.revalidate(candidate))) {
         outcomes.push({ id: candidate.id, status: 'changed' });
       } else {
-        await operations.execute(candidate);
-        outcomes.push({ id: candidate.id, status: 'cleaned' });
+        const execution = await operations.execute(candidate);
+        outcomes.push({ id: candidate.id, status: 'cleaned', ...execution });
       }
     } catch (error) {
       outcomes.push({

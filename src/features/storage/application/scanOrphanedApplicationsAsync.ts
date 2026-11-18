@@ -58,6 +58,7 @@ interface Inventory {
 interface OwnershipRoot {
   readonly path: string;
   readonly kind: 'bundle' | 'group' | 'named' | 'hidden';
+  readonly reportOnly?: boolean;
 }
 
 /** List only non-recursive ownership roots; system and shared roots never become cleanup targets. */
@@ -74,9 +75,9 @@ function ownershipRoots(home: string): readonly OwnershipRoot[] {
     { path: join(library, 'HTTPStorages'), kind: 'bundle' },
     { path: join(library, 'WebKit'), kind: 'named' },
     { path: join(library, 'Application Scripts'), kind: 'bundle' },
-    { path: join(library, 'LaunchAgents'), kind: 'bundle' },
-    { path: '/Library/Application Support', kind: 'named' },
-    { path: '/Library/LaunchAgents', kind: 'bundle' },
+    { path: join(library, 'LaunchAgents'), kind: 'bundle', reportOnly: true },
+    { path: '/Library/Application Support', kind: 'named', reportOnly: true },
+    { path: '/Library/LaunchAgents', kind: 'bundle', reportOnly: true },
     { path: home, kind: 'hidden' },
   ];
 }
@@ -92,7 +93,14 @@ async function rootObservationsAsync(
     );
     const observations = await Promise.all(
       names.map(
-        async (name) => await observationAsync(join(root.path, name), name, root.kind, inventory),
+        async (name) =>
+          await observationAsync(
+            join(root.path, name),
+            name,
+            root.kind,
+            root.reportOnly === true,
+            inventory,
+          ),
       ),
     );
     return observations.filter(
@@ -108,6 +116,7 @@ async function observationAsync(
   path: string,
   name: string,
   kind: OwnershipRoot['kind'],
+  reportOnly: boolean,
   inventory: Inventory,
 ): Promise<OrphanedApplicationObservation | null> {
   try {
@@ -118,7 +127,15 @@ async function observationAsync(
     if (!bundleId) return null;
     const inspection = await inventory.host.inspectPath(path);
     if (inspection.allocatedBytes === null) return null;
-    return observationFor(path, name, kind, bundleId, inspection.allocatedBytes, inventory);
+    return observationFor(
+      path,
+      name,
+      kind,
+      reportOnly,
+      bundleId,
+      { ...inspection, allocatedBytes: inspection.allocatedBytes },
+      inventory,
+    );
   } catch {
     return null;
   }
@@ -129,21 +146,32 @@ function observationFor(
   path: string,
   name: string,
   kind: OwnershipRoot['kind'],
+  reportOnly: boolean,
   bundleId: string,
-  allocatedBytes: number,
+  inspection: {
+    readonly allocatedBytes: number;
+    readonly blockers: readonly string[];
+    readonly fingerprint: string | null;
+  },
   inventory: Inventory,
 ): OrphanedApplicationObservation | null {
-  const blockers = protectionBlockers(bundleId, name, kind, inventory);
+  const blockers = [
+    ...protectionBlockers(bundleId, name, kind, inventory),
+    ...locationBlockers(reportOnly),
+    ...inspection.blockers,
+  ];
   const missing = inventory.inventoryComplete && !inventory.installed.has(bundleId);
   if (!missing && blockers.length === 0) return null;
   return {
     bundleId,
     label: `Possible remnant for ${bundleId}`,
     path,
-    allocatedBytes,
+    allocatedBytes: inspection.allocatedBytes,
+    fingerprint: inspection.fingerprint,
+    safeToTrash: missing && blockers.length === 0 && inspection.fingerprint !== null,
     confidence: 'medium',
     evidence: [
-      `${allocatedBytes} allocated bytes`,
+      `${inspection.allocatedBytes} allocated bytes`,
       `bundle identifier: ${bundleId}`,
       installationEvidence(missing, inventory.inventoryComplete),
     ],
@@ -193,6 +221,11 @@ function protectionBlockers(
       : []),
     ...inventory.unavailableSources.map((source) => `${source.source} evidence is unavailable`),
   ];
+}
+
+/** Keep system locations and potentially loaded user agents permanently outside Trash eligibility. */
+function locationBlockers(reportOnly: boolean): readonly string[] {
+  return reportOnly ? ['system or loaded-agent location'] : [];
 }
 
 /*** Gather all normalized values from the independently available evidence sources. */
