@@ -1,9 +1,11 @@
 /*** Provide reusable local storage inspection and approval boundaries. */
+export { collectMacosHostSecurityObservations } from './features/security-audit/adapters/outbound/collectMacosHostSecurityObservations.js';
+export { collectMacosPhysicalAndLinkObservations } from './features/security-audit/adapters/outbound/collectMacosPhysicalAndLinkObservations.js';
 export {
-  collectMacosHostSecurityObservations,
-  type MacosHostSecurityCommandResult,
-  type MacosHostSecurityCommandRunner,
-} from './features/security-audit/adapters/outbound/collectMacosHostSecurityObservations.js';
+  createMacosSecurityAuditCommandRunner,
+  type MacosSecurityAuditCommandResult,
+  type MacosSecurityAuditCommandRunner,
+} from './features/security-audit/adapters/outbound/createMacosSecurityAuditCommandRunner.js';
 export { runSecurityAudit } from './features/security-audit/application/runSecurityAudit.js';
 export { serializeSecurityAuditReport } from './features/security-audit/application/serializeSecurityAuditReport.js';
 export { createDefaultSecurityAuditReport } from './features/security-audit/composition/createDefaultSecurityAuditReport.js';

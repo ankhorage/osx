@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { discoverAnkhPackages, loadProviderManifests, runCli } from '@ankhorage/ankh';
 
@@ -25,6 +26,12 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     await mkdir(extracted);
     const unpacked = Bun.spawnSync(['tar', '-xzf', join(temp, archive), '-C', extracted]);
     expect(unpacked.exitCode).toBe(0);
+    const packageApi = await import(
+      pathToFileURL(join(extracted, 'package', 'dist', 'index.js')).href
+    );
+    expect(packageApi.collectMacosHostSecurityObservations).toBeFunction();
+    expect(packageApi.collectMacosPhysicalAndLinkObservations).toBeFunction();
+    expect(packageApi.createMacosSecurityAuditCommandRunner).toBeFunction();
     const discovered = await discoverAnkhPackages({ cwd: join(extracted, 'package') });
     expect(discovered.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([]);
     const ours = discovered.packages.filter((entry) => entry.packageName === '@ankhorage/osx');
@@ -159,4 +166,4 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
-});
+}, 30_000);

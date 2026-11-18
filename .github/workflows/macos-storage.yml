@@ -23,4 +23,4 @@ jobs:
           bun-version: '1.4.2'
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bun test tests/inspectTree.test.ts tests/bunCache.test.ts tests/resolveBunCache.test.ts tests/toolCleanup.test.ts tests/nativeTrashBoundary.test.ts tests/securityAudit.test.ts tests/macosHostSecurityObservations.test.ts
+      - run: bun test
