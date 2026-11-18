@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { rm } from 'node:fs/promises';
 
 import {
   collectApplicationPostureObservationAsync,
@@ -178,18 +179,25 @@ test('failed sharing and proxy sources never manufacture absence facts', async (
 });
 
 test.skipIf(process.platform !== 'darwin')(
-  'native command runner bounds time, output, and errors without retaining command diagnostics',
+  'native command runner bounds streams, redacts failures, and reaps SIGTERM-ignoring process groups',
   async () => {
     const runner = createMacosSecurityCommandRunner({
       maximumOutputBytes: 8,
       timeoutMilliseconds: 50,
     });
-    const [timeout, oversizedOutput, commandFailure, startFailure] = await Promise.all([
-      runner.runAsync(['/bin/sh', '-c', 'sleep 1']),
-      runner.runAsync(['/bin/sh', '-c', 'printf super-secret-output']),
-      runner.runAsync(['/bin/sh', '-c', 'printf command-secret >&2; exit 1']),
-      runner.runAsync(['/private/not-a-real-collector-secret']),
-    ]);
+    const marker = `/tmp/ankhorage-osx-security-posture-${process.pid}-${Date.now()}`;
+    const [timeout, oversizedOutput, commandFailure, startFailure, ignoringTerm] =
+      await Promise.all([
+        runner.runAsync(['/bin/sh', '-c', 'sleep 1']),
+        runner.runAsync(['/bin/sh', '-c', 'printf super-secret-output']),
+        runner.runAsync(['/bin/sh', '-c', 'printf command-secret >&2; exit 1']),
+        runner.runAsync(['/private/not-a-real-collector-secret']),
+        runner.runAsync([
+          '/bin/sh',
+          '-c',
+          `trap '' TERM; (trap '' TERM; while :; do :; done) & child=$!; printf '%s' "$child" > ${marker}; wait`,
+        ]),
+      ]);
 
     expect(timeout).toEqual({ exitCode: 1, stdout: '', stderr: 'Collector command timed out.' });
     expect(oversizedOutput).toEqual({
@@ -205,6 +213,15 @@ test.skipIf(process.platform !== 'darwin')(
     expect(JSON.stringify(commandFailure)).not.toContain('command-secret');
     expect(startFailure.stdout).toBe('');
     expect(JSON.stringify(startFailure)).not.toContain('not-a-real-collector-secret');
+    expect(ignoringTerm).toEqual({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'Collector command timed out.',
+    });
+    const childProcessId = Number(await Bun.file(marker).text());
+    expect(Number.isSafeInteger(childProcessId)).toBe(true);
+    expect(() => process.kill(childProcessId, 0)).toThrow();
+    await rm(marker, { force: true });
   },
 );
 
