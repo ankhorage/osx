@@ -31,6 +31,28 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     );
     expect(packageApi.collectMacosPhysicalAndLinkObservations).toBeFunction();
     expect(packageApi.createMacosSecurityAuditCommandRunner).toBeFunction();
+    expect(packageApi.parseRuntimeInventoryAsync).toBeFunction();
+    await expect(
+      packageApi.parseRuntimeInventoryAsync(
+        JSON.stringify({
+          runtimes: [
+            {
+              identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-18-0',
+              name: 'iOS 18.0',
+              version: '18.0',
+              buildversion: 'A',
+            },
+          ],
+        }),
+        JSON.stringify({ devices: {} }),
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        family: 'iOS/iPadOS',
+        identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-18-0',
+        newestInstalled: true,
+      }),
+    ]);
     const discovered = await discoverAnkhPackages({ cwd: join(extracted, 'package') });
     expect(discovered.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([]);
     const ours = discovered.packages.filter((entry) => entry.packageName === '@ankhorage/osx');
@@ -64,6 +86,12 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       'xcode',
       'scan',
     ]);
+    expect(
+      loaded.providers[0]?.manifest.commands.map((command) => command.path),
+    ).not.toContainEqual(['storage', 'xcode', 'clean']);
+    expect(
+      loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id),
+    ).not.toContain('osx.storage.xcode.clean');
     const output: string[] = [];
     const errors: string[] = [];
     const context = {
@@ -90,6 +118,7 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(output.join('')).toContain('storage scan');
     expect(output.join('')).toContain('storage clean');
     expect(output.join('')).toContain('storage xcode scan');
+    expect(output.join('')).not.toContain('storage xcode clean');
     expect(output.join('')).toContain('security audit');
     expect(output.join('')).toContain('security controls list');
     expect(output.join('')).toContain('storage orphans scan');
