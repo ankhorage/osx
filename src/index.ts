@@ -4,6 +4,12 @@ export { serializeSecurityAuditReport } from './features/security-audit/applicat
 export { createDefaultSecurityAuditReport } from './features/security-audit/composition/createDefaultSecurityAuditReport.js';
 export { createSecurityAuditCatalog } from './features/security-audit/domain/createSecurityAuditCatalog.js';
 export { createSecurityAuditProfile } from './features/security-audit/domain/createSecurityAuditProfile.js';
+export { collectSecurityNetworkAsync } from './features/security-network/application/collectSecurityNetworkAsync.js';
+export { collectDefaultSecurityNetworkAsync } from './features/security-network/composition/collectDefaultSecurityNetworkAsync.js';
+export type {
+  SecurityNetworkCommandResult,
+  SecurityNetworkHost,
+} from './features/security-network/ports/securityNetworkHost.js';
 export { cleanStorageAsync } from './features/storage/application/cleanStorageAsync.js';
 export { scanOrphanedApplicationsAsync } from './features/storage/application/scanOrphanedApplicationsAsync.js';
 export { scanStorageAsync } from './features/storage/composition/scanStorageAsync.js';
@@ -35,6 +41,15 @@ export type {
   SecurityAuditResult,
   SecurityAuditSeverity,
 } from './types/securityAudit.js';
+export type {
+  SecurityNetworkApplicationFirewallEvidence,
+  SecurityNetworkEvidence,
+  SecurityNetworkEvidenceAvailability,
+  SecurityNetworkLayer3Evidence,
+  SecurityNetworkLayer4Evidence,
+  SecurityNetworkPacketFilterEvidence,
+  SecurityNetworkSetting,
+} from './types/securityNetwork.js';
 export type {
   StorageCandidate,
   StorageCleanupResult,
