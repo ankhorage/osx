@@ -75,7 +75,7 @@ test('reports manifest-backed remnants while protecting installed, shared, activ
   }
 });
 
-test('orphan operations remain report-only and the approval engine cannot execute them', async () => {
+test('orphan operations remain report-only when a dotted path is absent from every inventory', async () => {
   const home = await realpath(await mkdtemp(join(tmpdir(), 'osx-orphans-')));
   try {
     await fixture(home, '.cursor', 'product.json', '{"bundleId":"com.cursor.Cursor"}');
@@ -95,6 +95,9 @@ test('orphan operations remain report-only and the approval engine cannot execut
       },
     });
     expect((await operations.scan()).every((item) => item.risk === 'report-only')).toBe(true);
+    expect(
+      (await operations.scan()).find((candidate) => candidate.path?.endsWith('.cursor'))?.reason,
+    ).toContain('manifest identity does not prove exclusive application ownership');
     expect(result.selected).toEqual([]);
     expect(result.outcomes).toEqual([]);
   } finally {

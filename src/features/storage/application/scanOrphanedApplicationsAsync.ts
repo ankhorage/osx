@@ -58,6 +58,7 @@ interface Inventory {
 interface OwnershipRoot {
   readonly path: string;
   readonly kind: 'bundle' | 'group' | 'named' | 'hidden';
+  readonly reportOnly?: boolean;
 }
 
 /** List only non-recursive ownership roots; system and shared roots never become cleanup targets. */
@@ -74,9 +75,9 @@ function ownershipRoots(home: string): readonly OwnershipRoot[] {
     { path: join(library, 'HTTPStorages'), kind: 'bundle' },
     { path: join(library, 'WebKit'), kind: 'named' },
     { path: join(library, 'Application Scripts'), kind: 'bundle' },
-    { path: join(library, 'LaunchAgents'), kind: 'bundle' },
-    { path: '/Library/Application Support', kind: 'named' },
-    { path: '/Library/LaunchAgents', kind: 'bundle' },
+    { path: join(library, 'LaunchAgents'), kind: 'bundle', reportOnly: true },
+    { path: '/Library/Application Support', kind: 'named', reportOnly: true },
+    { path: '/Library/LaunchAgents', kind: 'bundle', reportOnly: true },
     { path: home, kind: 'hidden' },
   ];
 }
@@ -92,7 +93,14 @@ async function rootObservationsAsync(
     );
     const observations = await Promise.all(
       names.map(
-        async (name) => await observationAsync(join(root.path, name), name, root.kind, inventory),
+        async (name) =>
+          await observationAsync(
+            join(root.path, name),
+            name,
+            root.kind,
+            root.reportOnly === true,
+            inventory,
+          ),
       ),
     );
     return observations.filter(
@@ -108,6 +116,7 @@ async function observationAsync(
   path: string,
   name: string,
   kind: OwnershipRoot['kind'],
+  reportOnly: boolean,
   inventory: Inventory,
 ): Promise<OrphanedApplicationObservation | null> {
   try {
@@ -118,7 +127,15 @@ async function observationAsync(
     if (!bundleId) return null;
     const inspection = await inventory.host.inspectPath(path);
     if (inspection.allocatedBytes === null) return null;
-    return observationFor(path, name, kind, bundleId, inspection.allocatedBytes, inventory);
+    return observationFor(
+      path,
+      name,
+      kind,
+      reportOnly,
+      bundleId,
+      inspection.allocatedBytes,
+      inventory,
+    );
   } catch {
     return null;
   }
@@ -129,11 +146,16 @@ function observationFor(
   path: string,
   name: string,
   kind: OwnershipRoot['kind'],
+  reportOnly: boolean,
   bundleId: string,
   allocatedBytes: number,
   inventory: Inventory,
 ): OrphanedApplicationObservation | null {
-  const blockers = protectionBlockers(bundleId, name, kind, inventory);
+  const blockers = [
+    ...protectionBlockers(bundleId, name, kind, inventory),
+    ...locationBlockers(reportOnly),
+    ...ownershipBlockers(kind),
+  ];
   const missing = inventory.inventoryComplete && !inventory.installed.has(bundleId);
   if (!missing && blockers.length === 0) return null;
   return {
@@ -192,6 +214,20 @@ function protectionBlockers(
       ? ['matching CLI-only installation exists']
       : []),
     ...inventory.unavailableSources.map((source) => `${source.source} evidence is unavailable`),
+  ];
+}
+
+/** Keep system locations and potentially loaded user agents permanently outside Trash eligibility. */
+function locationBlockers(reportOnly: boolean): readonly string[] {
+  return reportOnly ? ['system or loaded-agent location'] : [];
+}
+
+/** A manifest or dotted path name can identify a possible remnant, never prove exclusive app ownership. */
+function ownershipBlockers(kind: OwnershipRoot['kind']): readonly string[] {
+  return [
+    kind === 'hidden'
+      ? 'manifest identity does not prove exclusive application ownership'
+      : 'path name identity does not prove exclusive application ownership',
   ];
 }
 

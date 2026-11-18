@@ -94,8 +94,14 @@ function renderResult(result: StorageCleanupResult, write: (text: string) => voi
   if (!result.selected.length) write('No eligible candidates selected.\n');
   else if (!result.approved) write('Cleanup cancelled.\n');
   else if (result.dryRun) write('Dry-run: no files changed.\n');
-  for (const outcome of result.outcomes)
+  for (const outcome of result.outcomes) {
     write(`${outcome.id}: ${outcome.status}${outcome.error ? ` (${outcome.error})` : ''}\n`);
+    if (outcome.recoveryPath) write(`${outcome.id}: recovery path: ${outcome.recoveryPath}\n`);
+    if (outcome.movedBytes !== undefined)
+      write(
+        `${outcome.id}: moved to Trash: ${outcome.movedBytes} bytes; this is not storage freed until Trash is emptied.\n`,
+      );
+  }
   if (result.freeBytesBefore !== null && result.freeBytesAfter !== null)
     write(
       `Filesystem free-space change: ${result.freeBytesAfter - result.freeBytesBefore} bytes. APFS accounting may be delayed.\n`,

@@ -1,4 +1,8 @@
-import type { StorageCandidate, StorageOperations } from '../../../types/storage.js';
+import type {
+  StorageCandidate,
+  StorageExecution,
+  StorageOperations,
+} from '../../../types/storage.js';
 import { createBunCacheHost } from '../adapters/outbound/createBunCacheHost.js';
 import { createBunCacheOperations } from '../adapters/outbound/createBunCacheOperations.js';
 import { createToolCleanupOperations } from '../adapters/outbound/createToolCleanupOperations.js';
@@ -27,7 +31,7 @@ export function createDefaultStorageOperations(
       return await revalidateAsync(sources, candidate);
     },
     async execute(candidate) {
-      await executeAsync(sources, candidate);
+      return await executeAsync(sources, candidate);
     },
     async availableBytes() {
       return await bun.availableBytes();
@@ -52,12 +56,11 @@ async function revalidateAsync(
 async function executeAsync(
   sources: readonly StorageOperations[],
   candidate: StorageCandidate,
-): Promise<void> {
+): Promise<StorageExecution | void> {
   for (const source of sources) {
     const current = await source.scan();
     if (!current.some((item) => item.id === candidate.id)) continue;
-    await source.execute(candidate);
-    return;
+    return await source.execute(candidate);
   }
   throw new Error(`No cleanup adapter owns ${candidate.id}.`);
 }

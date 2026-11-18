@@ -161,6 +161,28 @@ test('reports completed operations when the final disk measurement fails', async
   expect(result.freeBytesAfter).toBeNull();
 });
 
+test('retains reversible-move accounting separately from filesystem free-space measurements', async () => {
+  const operations: StorageOperations = {
+    scan: async () => [candidates[0]!],
+    revalidate: async () => true,
+    execute: async () => ({ movedBytes: 12, recoveryPath: '/Users/example/.Trash/restore/a' }),
+    availableBytes: async () => 100,
+  };
+  const result = await cleanStorageAsync(operations, {
+    select: async () => true,
+    approve: async () => true,
+  });
+  expect(result.outcomes).toEqual([
+    {
+      id: 'a',
+      status: 'cleaned',
+      movedBytes: 12,
+      recoveryPath: '/Users/example/.Trash/restore/a',
+    },
+  ]);
+  expect(result.freeBytesAfter).toBe(100);
+});
+
 test('does not mutate when the initial free-space measurement is unavailable', async () => {
   const events: string[] = [];
   const operations: StorageOperations = {

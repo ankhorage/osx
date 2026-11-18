@@ -39,5 +39,6 @@ export type {
   StorageCandidate,
   StorageCleanupResult,
   StorageDecisions,
+  StorageExecution,
   StorageOperations,
 } from './types/storage.js';

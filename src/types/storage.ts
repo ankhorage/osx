@@ -14,8 +14,14 @@ export interface StorageCandidate {
 export interface StorageOperations {
   scan(): Promise<readonly StorageCandidate[]>;
   revalidate(candidate: StorageCandidate): Promise<boolean>;
-  execute(candidate: StorageCandidate): Promise<void>;
+  execute(candidate: StorageCandidate): Promise<StorageExecution | void>;
   availableBytes(): Promise<number | null>;
+}
+
+/** A reversible execution record retained for accurate cleanup reporting. */
+export interface StorageExecution {
+  readonly movedBytes?: number;
+  readonly recoveryPath?: string;
 }
 
 /** Decisions are made by the delivery edge and never imply final approval. */
@@ -30,6 +36,8 @@ export interface StorageCleanupResult {
     readonly id: string;
     readonly status: 'cleaned' | 'changed' | 'failed';
     readonly error?: string;
+    readonly movedBytes?: number;
+    readonly recoveryPath?: string;
   }[];
   readonly approved: boolean;
   readonly dryRun: boolean;
