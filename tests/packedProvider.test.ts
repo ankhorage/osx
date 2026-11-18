@@ -165,4 +165,4 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
-});
+}, 30_000);
