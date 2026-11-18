@@ -39,7 +39,7 @@ export function createSecurityAuditCoverageMatrix(
 
 /** Create an empty immutable-shaped coverage counter. */
 function emptyTotals(): SecurityAuditCoverageTotals {
-  return { implemented: 0, supported: 0, unsupported: 0, permissionBlocked: 0 };
+  return { implemented: 0, supported: 0, unsupported: 0, incomplete: 0, permissionBlocked: 0 };
 }
 
 /** Increment the one coverage state represented by a control result. */
@@ -49,6 +49,7 @@ function addCoverage(
 ): SecurityAuditCoverageTotals {
   if (coverage === 'implemented') return { ...totals, implemented: totals.implemented + 1 };
   if (coverage === 'supported') return { ...totals, supported: totals.supported + 1 };
+  if (coverage === 'incomplete') return { ...totals, incomplete: totals.incomplete + 1 };
   if (coverage === 'permission-blocked')
     return { ...totals, permissionBlocked: totals.permissionBlocked + 1 };
   return { ...totals, unsupported: totals.unsupported + 1 };
