@@ -4,7 +4,8 @@ import type { AnkhCommandExecutionRequest, AnkhCommandInteraction } from '@ankho
 
 import { cleanStorageAsync } from '../../../features/storage/application/cleanStorageAsync.js';
 import { createDefaultStorageOperations } from '../../../features/storage/composition/createDefaultStorageOperations.js';
-import type { StorageCleanupResult, StorageDecisions } from '../../../types/storage.js';
+import type { StorageDecisions } from '../../../types/storage.js';
+import { renderStorageCleanupResult } from '../../renderStorageCleanupResult.js';
 
 /*** Collect per-cache decisions and a final confirmation before any cleanup. */
 export async function clean(request: AnkhCommandExecutionRequest): Promise<{ exitCode: number }> {
@@ -58,7 +59,7 @@ async function runCleanupAsync(
     createDecisions(interaction, (text) => context.writeStdout(text)),
     request.argv.includes('--dry-run'),
   );
-  renderResult(result, (text) => context.writeStdout(text));
+  renderStorageCleanupResult(result, (text) => context.writeStdout(text));
   return { exitCode: result.outcomes.some((outcome) => outcome.status !== 'cleaned') ? 1 : 0 };
 }
 
@@ -87,23 +88,4 @@ function createDecisions(
       return (await interaction.confirm('Approve this cleanup plan?')) === 'confirmed';
     },
   };
-}
-
-/*** Distinguish approved estimates, actual results and filesystem accounting. */
-function renderResult(result: StorageCleanupResult, write: (text: string) => void): void {
-  if (!result.selected.length) write('No eligible candidates selected.\n');
-  else if (!result.approved) write('Cleanup cancelled.\n');
-  else if (result.dryRun) write('Dry-run: no files changed.\n');
-  for (const outcome of result.outcomes) {
-    write(`${outcome.id}: ${outcome.status}${outcome.error ? ` (${outcome.error})` : ''}\n`);
-    if (outcome.recoveryPath) write(`${outcome.id}: recovery path: ${outcome.recoveryPath}\n`);
-    if (outcome.movedBytes !== undefined)
-      write(
-        `${outcome.id}: moved to Trash: ${outcome.movedBytes} bytes; this is not storage freed until Trash is emptied.\n`,
-      );
-  }
-  if (result.freeBytesBefore !== null && result.freeBytesAfter !== null)
-    write(
-      `Filesystem free-space change: ${result.freeBytesAfter - result.freeBytesBefore} bytes. APFS accounting may be delayed.\n`,
-    );
 }

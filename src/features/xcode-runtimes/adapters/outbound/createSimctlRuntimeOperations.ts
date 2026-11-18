@@ -3,14 +3,18 @@ import { createHash } from 'node:crypto';
 import { statfs } from 'node:fs/promises';
 import { promisify } from 'node:util';
 
-import type { StorageCandidate, StorageOperations } from '../../../../types/storage.js';
-import type { SimctlHost, XcodeRuntime } from '../../../../types/xcodeRuntime.js';
+import type { StorageCandidate } from '../../../../types/storage.js';
+import type {
+  SimctlHost,
+  XcodeRuntime,
+  XcodeRuntimeOperations,
+} from '../../../../types/xcodeRuntime.js';
 import { inspectTreeAsync } from '../../../storage/adapters/outbound/inspectTreeAsync.js';
 
 /** Create the Xcode-owned Simulator runtime cleanup boundary. */
 export function createSimctlRuntimeOperations(
   host: SimctlHost = createSimctlHost(),
-): StorageOperations {
+): XcodeRuntimeOperations {
   return {
     async scan() {
       return await scanSimctlAsync(host);
@@ -20,14 +24,23 @@ export function createSimctlRuntimeOperations(
       return current.some((item) => sameCandidate(candidate, item));
     },
     async execute(candidate) {
+      if (candidate.kind === 'unavailable-simulator-devices')
+        throw new Error('Unavailable Simulator devices require the separate explicit operation.');
       if (!(await this.revalidate(candidate)))
         throw new Error('Xcode runtime changed before deletion.');
-      if (candidate.kind === 'unavailable-simulator-devices') {
-        await host.run('xcrun', ['simctl', 'delete', 'unavailable']);
-        return;
-      }
       const identifier = candidate.id.replace(/^xcode-runtime:/u, '');
       await host.run('xcrun', ['simctl', 'runtime', 'delete', identifier]);
+    },
+    async revalidateUnavailableDevices(candidate) {
+      const current = await scanSimctlAsync(host);
+      return current.some(
+        (item) => item.kind === 'unavailable-simulator-devices' && sameCandidate(candidate, item),
+      );
+    },
+    async executeUnavailableDevices(candidate) {
+      if (!(await this.revalidateUnavailableDevices(candidate)))
+        throw new Error('Unavailable Simulator devices changed before deletion.');
+      await host.run('xcrun', ['simctl', 'delete', 'unavailable']);
     },
     async availableBytes() {
       return await host.freeBytes('/');

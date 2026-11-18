@@ -111,11 +111,17 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(output.join('')).toContain('storage xcode scan');
     output.length = 0;
     const scan = await runCli(['osx', 'storage', 'scan', '--json'], options);
+    const xcodeClean = await runCli(['osx', 'storage', 'xcode', 'clean', '--dry-run'], options);
     if (process.platform === 'darwin') {
       expect(scan.exitCode).toBe(0);
       expect(JSON.parse(output.join('')).candidates).toBeArray();
+      expect(xcodeClean.exitCode).toBe(1);
+      expect(errors.join('')).toContain('Interactive confirmation is required');
     } else {
       expect(scan.exitCode).toBe(1);
+      expect(errors.join('')).toContain('only on macOS');
+      errors.length = 0;
+      expect(xcodeClean.exitCode).toBe(1);
       expect(errors.join('')).toContain('only on macOS');
       errors.length = 0;
       const xcodeScan = await runCli(['osx', 'storage', 'xcode', 'scan', '--json'], options);

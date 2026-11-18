@@ -96,6 +96,150 @@ test('collects decisions before deletion and revalidates the runtime snapshot', 
   }
 });
 
+test('keeps unavailable devices outside Storage-V1 while requiring their own unchanged snapshot', async () => {
+  const calls: string[] = [];
+  const inventories = [
+    devicesJson('11111111-1111-1111-1111-111111111111'),
+    devicesJson('22222222-2222-2222-2222-222222222222'),
+  ];
+  const inventoryIndex = { value: 0 };
+  const host: SimctlHost = {
+    async run(command, args) {
+      const call = `${command} ${args.join(' ')}`;
+      calls.push(call);
+      if (command === 'xcode-select')
+        return { stdout: '/Applications/Xcode.app/Contents/Developer\n', stderr: '' };
+      if (args.join(' ') === 'simctl help runtime') return { stdout: 'runtime delete', stderr: '' };
+      if (args.join(' ') === 'simctl help delete')
+        return { stdout: 'delete unavailable', stderr: '' };
+      if (args.join(' ') === 'simctl list runtimes -j')
+        return { stdout: JSON.stringify({ runtimes: [] }), stderr: '' };
+      if (args.join(' ') === 'simctl list devices -j') {
+        const result = inventories[inventoryIndex.value] ?? inventories.at(-1)!;
+        inventoryIndex.value += 1;
+        return { stdout: result, stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    },
+    async freeBytes() {
+      return 100;
+    },
+  };
+  const operations = createSimctlRuntimeOperations(host);
+  const unavailable = (await operations.scan()).find(
+    (candidate) => candidate.kind === 'unavailable-simulator-devices',
+  );
+  expect(unavailable).toBeDefined();
+  if (!unavailable) throw new Error('Expected unavailable-device candidate');
+  expect(unavailable.estimatedBytes).toBeNull();
+  expect(unavailable.risk).toBe('safe');
+  await expect(operations.execute(unavailable)).rejects.toThrow(
+    'Unavailable Simulator devices require the separate explicit operation.',
+  );
+  const genericResult = await cleanStorageAsync(operations, {
+    async select() {
+      throw new Error('Storage-V1 must not select an unmeasured device operation');
+    },
+    async approve() {
+      throw new Error('Storage-V1 must not approve an unmeasured device operation');
+    },
+  });
+  expect(genericResult.selected).toEqual([]);
+  await expect(operations.executeUnavailableDevices(unavailable)).rejects.toThrow(
+    'Unavailable Simulator devices changed before deletion.',
+  );
+  expect(calls).not.toContain('xcrun simctl delete unavailable');
+});
+
+test('deletes only the explicitly revalidated unavailable-device snapshot', async () => {
+  const calls: string[] = [];
+  const host = unavailableDeviceHost(calls, devicesJson('33333333-3333-3333-3333-333333333333'));
+  const operations = createSimctlRuntimeOperations(host);
+  const unavailable = (await operations.scan()).find(
+    (candidate) => candidate.kind === 'unavailable-simulator-devices',
+  );
+  if (!unavailable) throw new Error('Expected unavailable-device candidate');
+  expect(await operations.revalidateUnavailableDevices(unavailable)).toBeTrue();
+  await operations.executeUnavailableDevices(unavailable);
+  expect(calls).toContain('xcrun simctl delete unavailable');
+});
+
+test('marks a booted runtime report-only even when runtime deletion is supported', async () => {
+  const host = unavailableDeviceHost(calls(), JSON.stringify({ devices: {} }));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'osx-booted-runtime-')));
+  try {
+    const runtimePath = join(root, 'runtime');
+    await mkdir(runtimePath);
+    const originalRun = host.run;
+    host.run = async (command, args) => {
+      if (args.join(' ') === 'simctl list runtimes -j')
+        return {
+          stdout: JSON.stringify({
+            runtimes: [
+              runtime('com.apple.CoreSimulator.SimRuntime.iOS-18-0', '18.0', '22A', runtimePath),
+            ],
+          }),
+          stderr: '',
+        };
+      if (args.join(' ') === 'simctl list devices -j')
+        return {
+          stdout: JSON.stringify({
+            devices: {
+              'com.apple.CoreSimulator.SimRuntime.iOS-18-0': [
+                { udid: 'booted', state: 'Booted', isAvailable: true },
+              ],
+            },
+          }),
+          stderr: '',
+        };
+      return await originalRun(command, args);
+    };
+    const candidate = (await createSimctlRuntimeOperations(host).scan()).find(
+      (item) => item.kind === 'xcode-runtime',
+    );
+    expect(candidate?.risk).toBe('report-only');
+    expect(candidate?.reason).toContain('1 booted simulator device(s)');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+/** Create deterministic unavailable-device inventory JSON. */
+function devicesJson(udid: string): string {
+  return JSON.stringify({
+    devices: {
+      unavailable: [{ name: 'Old phone', udid, isAvailable: false, state: 'Shutdown' }],
+    },
+  });
+}
+
+/** Create a supported simctl host with a fixed device inventory. */
+function unavailableDeviceHost(calls: string[], devices: string): SimctlHost {
+  return {
+    async run(command, args) {
+      const call = `${command} ${args.join(' ')}`;
+      calls.push(call);
+      if (command === 'xcode-select')
+        return { stdout: '/Applications/Xcode.app/Contents/Developer\n', stderr: '' };
+      if (args.join(' ') === 'simctl help runtime') return { stdout: 'runtime delete', stderr: '' };
+      if (args.join(' ') === 'simctl help delete')
+        return { stdout: 'delete unavailable', stderr: '' };
+      if (args.join(' ') === 'simctl list runtimes -j')
+        return { stdout: JSON.stringify({ runtimes: [] }), stderr: '' };
+      if (args.join(' ') === 'simctl list devices -j') return { stdout: devices, stderr: '' };
+      return { stdout: '', stderr: '' };
+    },
+    async freeBytes() {
+      return 100;
+    },
+  };
+}
+
+/** Allocate an isolated call log for deterministic fake hosts. */
+function calls(): string[] {
+  return [];
+}
+
 /** Build a minimal official runtime JSON fixture. */
 function runtime(identifier: string, version: string, buildversion: string, bundlePath?: string) {
   return {
