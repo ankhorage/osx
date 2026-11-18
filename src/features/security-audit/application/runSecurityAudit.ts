@@ -11,7 +11,8 @@ import type {
 } from '../../../types/securityAudit.js';
 import { createSecurityAuditCoverageMatrix } from '../domain/createSecurityAuditCoverageMatrix.js';
 import { validateSecurityAuditFacts } from '../domain/validateSecurityAuditFacts.js';
-
+import { createSecurityAuditBaselineEvaluation } from './createSecurityAuditBaselineEvaluation.js';
+import { getSecurityAuditAccessResult } from './getSecurityAuditAccessResult.js';
 /*** Evaluate read-only observations from their validated evidence and the selected control baseline. */
 export function runSecurityAudit(
   controls: readonly SecurityAuditControl[],
@@ -52,8 +53,9 @@ function createResult(
     return createUnknownResult(control, 'unsupported', 'missing-evidence', baseline);
   if (!isRecord(observation))
     return createUnknownResult(control, 'supported', 'invalid-evidence', baseline);
-  if (hasMetadataValue(observation, 'access', 'permission-blocked'))
-    return createUnknownResult(control, 'permission-blocked', 'inaccessible-evidence', baseline);
+  const inaccessibleAccess = getSecurityAuditAccessResult(observation);
+  if (inaccessibleAccess)
+    return createUnknownResult(control, inaccessibleAccess[0], inaccessibleAccess[1], baseline);
   if (!hasMetadataValue(observation, 'access', 'available'))
     return createUnknownResult(control, 'supported', 'invalid-evidence', baseline);
   if (!hasValidApplicability(observation))
@@ -72,7 +74,6 @@ function createResult(
     return createNotApplicableResult(control, baseline, evidence);
   return createPredicateResult(control, baseline, evidence);
 }
-
 /** Group untrusted collector records without allowing malformed or duplicate JSON to abort the report. */
 function collectObservationsByControlId(
   controlsById: ReadonlySet<string>,
@@ -91,7 +92,6 @@ function collectObservationsByControlId(
     return new Map([...collected, [observation.controlId, observation]]);
   }, new Map());
 }
-
 /** Sort only validated evidence so malformed JSON is never echoed into a report. */
 function sortEvidence(value: readonly unknown[]): readonly SecurityAuditEvidence[] | undefined {
   if (!value.every(isRecord)) return undefined;
@@ -100,7 +100,6 @@ function sortEvidence(value: readonly unknown[]): readonly SecurityAuditEvidence
     left.id.localeCompare(right.id),
   );
 }
-
 /** Validate that the active profile names a versioned, internally consistent baseline. */
 function isValidProfile(profile: SecurityAuditProfile): boolean {
   return (
@@ -172,6 +171,7 @@ function hasMetadataValue(
     | 'critical'
     | 'high'
     | 'info'
+    | 'incomplete'
     | 'low'
     | 'medium'
     | 'not-applicable'
@@ -259,7 +259,7 @@ function createUnknownResult(
     confidence: 'none',
     evidence,
     recommendation: control.recommendation,
-    baseline: createBaselineEvaluation(baseline, status, evidence),
+    baseline: createSecurityAuditBaselineEvaluation(baseline, status, evidence),
   };
 }
 
@@ -278,7 +278,7 @@ function createNotApplicableResult(
     confidence: confidenceFor(evidence),
     evidence,
     recommendation: control.recommendation,
-    baseline: createBaselineEvaluation(baseline, 'verified', evidence),
+    baseline: createSecurityAuditBaselineEvaluation(baseline, 'verified', evidence),
   };
 }
 
@@ -297,12 +297,11 @@ function createPassedResult(
     confidence: confidenceFor(evidence),
     evidence,
     recommendation: control.recommendation,
-    baseline: createBaselineEvaluation(baseline, 'verified', evidence),
+    baseline: createSecurityAuditBaselineEvaluation(baseline, 'verified', evidence),
   };
 }
 
-/** Derive failure severity from the selected control definition rather than a collector assertion. */
-function createFailedResult(
+/** Derive failure severity from the selected control definition rather than a collector assertion. */ function createFailedResult(
   control: SecurityAuditControl,
   baseline: SecurityAuditBaseline,
   evidence: readonly SecurityAuditEvidence[],
@@ -316,21 +315,7 @@ function createFailedResult(
     confidence: confidenceFor(evidence),
     evidence,
     recommendation: control.recommendation,
-    baseline: createBaselineEvaluation(baseline, 'verified', evidence),
-  };
-}
-
-/** Preserve the selected baseline and its exact evidence identifiers in every report result. */
-function createBaselineEvaluation(
-  baseline: SecurityAuditBaseline | undefined,
-  status: SecurityAuditBaselineEvaluation['status'],
-  evidence: readonly SecurityAuditEvidence[],
-): SecurityAuditBaselineEvaluation {
-  return {
-    profileId: baseline?.profileId ?? '',
-    expectedSecureCondition: baseline?.expectedSecureCondition ?? '',
-    status,
-    evidenceIds: evidence.map((item) => item.id),
+    baseline: createSecurityAuditBaselineEvaluation(baseline, 'verified', evidence),
   };
 }
 

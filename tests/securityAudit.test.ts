@@ -107,6 +107,12 @@ test('missing, blocked, contradictory, and unknown applicability evidence fail c
     ]),
     controlId,
   );
+  const incomplete = findControl(
+    runSecurityAudit(controlsWithPredicate(), profile, [
+      observation({ access: 'incomplete', evidence: [evidence()] }),
+    ]),
+    controlId,
+  );
   const contradictory = findControl(
     runSecurityAudit(controlsWithPredicate(), profile, [
       observation({
@@ -133,6 +139,8 @@ test('missing, blocked, contradictory, and unknown applicability evidence fail c
     evidence: [],
   });
   expect(blocked.baseline.status).toBe('inaccessible-evidence');
+  expect(incomplete).toMatchObject({ outcome: 'unknown', coverage: 'incomplete', evidence: [] });
+  expect(incomplete.baseline.status).toBe('incomplete-evidence');
   expect(contradictory).toMatchObject({ outcome: 'unknown', coverage: 'implemented' });
   expect(contradictory.baseline.status).toBe('contradictory-evidence');
   expect(unknownApplicability).toMatchObject({ outcome: 'unknown', coverage: 'implemented' });
