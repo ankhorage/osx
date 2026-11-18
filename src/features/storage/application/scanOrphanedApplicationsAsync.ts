@@ -133,7 +133,7 @@ async function observationAsync(
       kind,
       reportOnly,
       bundleId,
-      { ...inspection, allocatedBytes: inspection.allocatedBytes },
+      inspection.allocatedBytes,
       inventory,
     );
   } catch {
@@ -148,17 +148,13 @@ function observationFor(
   kind: OwnershipRoot['kind'],
   reportOnly: boolean,
   bundleId: string,
-  inspection: {
-    readonly allocatedBytes: number;
-    readonly blockers: readonly string[];
-    readonly fingerprint: string | null;
-  },
+  allocatedBytes: number,
   inventory: Inventory,
 ): OrphanedApplicationObservation | null {
   const blockers = [
     ...protectionBlockers(bundleId, name, kind, inventory),
     ...locationBlockers(reportOnly),
-    ...inspection.blockers,
+    ...ownershipBlockers(kind),
   ];
   const missing = inventory.inventoryComplete && !inventory.installed.has(bundleId);
   if (!missing && blockers.length === 0) return null;
@@ -166,12 +162,10 @@ function observationFor(
     bundleId,
     label: `Possible remnant for ${bundleId}`,
     path,
-    allocatedBytes: inspection.allocatedBytes,
-    fingerprint: inspection.fingerprint,
-    safeToTrash: missing && blockers.length === 0 && inspection.fingerprint !== null,
+    allocatedBytes,
     confidence: 'medium',
     evidence: [
-      `${inspection.allocatedBytes} allocated bytes`,
+      `${allocatedBytes} allocated bytes`,
       `bundle identifier: ${bundleId}`,
       installationEvidence(missing, inventory.inventoryComplete),
     ],
@@ -226,6 +220,15 @@ function protectionBlockers(
 /** Keep system locations and potentially loaded user agents permanently outside Trash eligibility. */
 function locationBlockers(reportOnly: boolean): readonly string[] {
   return reportOnly ? ['system or loaded-agent location'] : [];
+}
+
+/** A manifest or dotted path name can identify a possible remnant, never prove exclusive app ownership. */
+function ownershipBlockers(kind: OwnershipRoot['kind']): readonly string[] {
+  return [
+    kind === 'hidden'
+      ? 'manifest identity does not prove exclusive application ownership'
+      : 'path name identity does not prove exclusive application ownership',
+  ];
 }
 
 /*** Gather all normalized values from the independently available evidence sources. */

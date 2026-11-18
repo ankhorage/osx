@@ -4,8 +4,6 @@ export interface OrphanedApplicationObservation {
   readonly label: string;
   readonly path: string;
   readonly allocatedBytes: number;
-  readonly fingerprint: string | null;
-  readonly safeToTrash: boolean;
   readonly confidence: 'low' | 'medium';
   readonly evidence: readonly string[];
   readonly evidenceAvailability: readonly OrphanedApplicationEvidenceAvailability[];
@@ -31,17 +29,5 @@ export interface OrphanedApplicationHost {
   receiptBundleIds(): Promise<readonly OrphanedApplicationEvidenceSource[]>;
   activeProcessNames(): Promise<readonly OrphanedApplicationEvidenceSource[]>;
   cliNames(): Promise<readonly OrphanedApplicationEvidenceSource[]>;
-  inspectPath(path: string): Promise<OrphanedApplicationPathInspection>;
-  moveToTrash(
-    path: string,
-    fingerprint: string,
-  ): Promise<{ readonly recoveryPath: string; readonly movedBytes: number }>;
-  availableBytes(): Promise<number | null>;
-}
-
-/** The complete path identity required before an app-owned tree can be moved safely. */
-export interface OrphanedApplicationPathInspection {
-  readonly allocatedBytes: number | null;
-  readonly blockers: readonly string[];
-  readonly fingerprint: string | null;
+  inspectPath(path: string): Promise<{ readonly allocatedBytes: number | null }>;
 }

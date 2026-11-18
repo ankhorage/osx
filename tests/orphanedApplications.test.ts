@@ -1,12 +1,11 @@
 import { expect, test } from 'bun:test';
 import { execFile } from 'node:child_process';
-import { access, link, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { createOrphanedApplicationOperations } from '../src/features/storage/adapters/outbound/createOrphanedApplicationOperations.js';
-import { createOrphanedApplicationHost } from '../src/features/storage/adapters/outbound/createOrphanedApplicationHost.js';
 import { readApplicationBundleIdAsync } from '../src/features/storage/adapters/outbound/readApplicationBundleIdAsync.js';
 import { cleanStorageAsync } from '../src/features/storage/application/cleanStorageAsync.js';
 import { scanOrphanedApplicationsAsync } from '../src/features/storage/application/scanOrphanedApplicationsAsync.js';
@@ -46,9 +45,7 @@ test('reports manifest-backed remnants while protecting installed, shared, activ
       receiptBundleIds: async () => evidence('package-receipts', ['vendor.match']),
       activeProcessNames: async () => evidence('active-processes', ['windsurf']),
       cliNames: async () => evidence('homebrew-apple-silicon', []),
-      inspectPath: async () => inspection(),
-      moveToTrash: async () => ({ recoveryPath: '/Trash/recovery', movedBytes: 1 }),
-      availableBytes: async () => 1,
+      inspectPath: async () => ({ allocatedBytes: 1 }),
     };
     const observations = await scanOrphanedApplicationsAsync(home, host);
     const userObservations = observations.filter((item) => item.path.startsWith(home));
@@ -78,7 +75,7 @@ test('reports manifest-backed remnants while protecting installed, shared, activ
   }
 });
 
-test('orphan operations require explicit approval before the Trash adapter can execute', async () => {
+test('orphan operations remain report-only when a dotted path is absent from every inventory', async () => {
   const home = await realpath(await mkdtemp(join(tmpdir(), 'osx-orphans-')));
   try {
     await fixture(home, '.cursor', 'product.json', '{"bundleId":"com.cursor.Cursor"}');
@@ -87,16 +84,21 @@ test('orphan operations require explicit approval before the Trash adapter can e
       receiptBundleIds: async () => evidence('package-receipts', []),
       activeProcessNames: async () => evidence('active-processes', []),
       cliNames: async () => evidence('homebrew-apple-silicon', []),
-      inspectPath: async () => inspection(),
-      moveToTrash: async () => ({ recoveryPath: '/Trash/recovery', movedBytes: 1 }),
-      availableBytes: async () => 1,
+      inspectPath: async () => ({ allocatedBytes: 1 }),
     });
     const result = await cleanStorageAsync(operations, {
-      select: async () => true,
-      approve: async () => false,
+      select: async () => {
+        throw new Error('report-only candidates must not be selected');
+      },
+      approve: async () => {
+        throw new Error('report-only candidates must not be approved');
+      },
     });
-    expect((await operations.scan()).some((item) => item.risk === 'safe')).toBe(true);
-    expect(result.selected).toHaveLength(1);
+    expect((await operations.scan()).every((item) => item.risk === 'report-only')).toBe(true);
+    expect(
+      (await operations.scan()).find((candidate) => candidate.path?.endsWith('.cursor'))?.reason,
+    ).toContain('manifest identity does not prove exclusive application ownership');
+    expect(result.selected).toEqual([]);
     expect(result.outcomes).toEqual([]);
   } finally {
     await rm(home, { recursive: true, force: true });
@@ -166,40 +168,6 @@ test('unavailable evidence blocks an absent bundle from being described as unins
   }
 });
 
-test('moves an unchanged app-owned tree into a recoverable private Trash directory', async () => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), 'osx-orphans-')));
-  try {
-    const path = join(home, 'Library', 'Caches', 'com.example.App');
-    await fixture(home, join('Library', 'Caches', 'com.example.App'), 'state', 'cache');
-    const host = createOrphanedApplicationHost(home);
-    const inspection = await host.inspectPath(path);
-    if (!inspection.fingerprint || inspection.allocatedBytes === null)
-      throw new Error('fixture blocked');
-    const transfer = await host.moveToTrash(path, inspection.fingerprint);
-    await expect(access(path)).rejects.toThrow();
-    expect(await Bun.file(join(transfer.recoveryPath, 'state')).text()).toBe('cache');
-    expect(transfer.movedBytes).toBe(inspection.allocatedBytes);
-  } finally {
-    await rm(home, { recursive: true, force: true });
-  }
-});
-
-test('rejects hard-linked or changed trees before any Trash transfer', async () => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), 'osx-orphans-')));
-  try {
-    const path = join(home, 'Library', 'Caches', 'com.example.App');
-    await fixture(home, join('Library', 'Caches', 'com.example.App'), 'state', 'cache');
-    await link(join(path, 'state'), join(home, 'outside-link'));
-    const host = createOrphanedApplicationHost(home);
-    const inspection = await host.inspectPath(path);
-    expect(inspection.fingerprint).toBeNull();
-    await expect(host.moveToTrash(path, 'stale')).rejects.toThrow('cannot be safely inspected');
-    await expect(access(path)).resolves.toBeNull();
-  } finally {
-    await rm(home, { recursive: true, force: true });
-  }
-});
-
 test.if(process.platform === 'darwin')(
   'reads binary application Info.plist bundle identifiers',
   async () => {
@@ -251,13 +219,6 @@ function unavailableInventoryHost(): OrphanedApplicationHost {
     receiptBundleIds: async () => evidence('package-receipts', []),
     activeProcessNames: async () => evidence('active-processes', []),
     cliNames: async () => evidence('homebrew-apple-silicon', []),
-    inspectPath: async () => inspection(),
-    moveToTrash: async () => ({ recoveryPath: '/Trash/recovery', movedBytes: 1 }),
-    availableBytes: async () => 1,
+    inspectPath: async () => ({ allocatedBytes: 1 }),
   };
-}
-
-/** Provide complete inspection evidence for fixture-only read-only discovery tests. */
-function inspection() {
-  return { allocatedBytes: 1, blockers: [], fingerprint: 'fixture' };
 }

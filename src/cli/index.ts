@@ -2,8 +2,9 @@ import type { AnkhRuntimeCommandProvider } from '@ankhorage/ankh';
 import type { Capability } from '@ankhorage/contracts/capability';
 
 import packageJson from '../../package.json';
+import { audit } from './commands/security/audit.js';
+import { list } from './commands/security/controls/list.js';
 import { clean } from './commands/storage/clean.js';
-import { clean as cleanOrphans } from './commands/storage/orphans/clean.js';
 import { scan as scanOrphans } from './commands/storage/orphans/scan.js';
 import { scan } from './commands/storage/scan.js';
 
@@ -30,11 +31,18 @@ const capabilities = [
     label: 'Inspect orphaned application remnants',
   },
   {
-    id: 'osx.storage.orphans.clean',
+    id: 'osx.security.audit',
     owner: '@ankhorage/osx',
     access: ['invoke'],
     binding: { kind: 'action', bindableAs: ['target'] },
-    label: 'Move verified orphaned application remnants to Trash',
+    label: 'Audit macOS security posture',
+  },
+  {
+    id: 'osx.security.controls.list',
+    owner: '@ankhorage/osx',
+    access: ['invoke'],
+    binding: { kind: 'action', bindableAs: ['target'] },
+    label: 'List macOS security controls',
   },
 ] as const satisfies readonly Capability[];
 
@@ -56,16 +64,22 @@ const provider = {
       summary: 'Inspect orphaned application remnants.',
     },
     {
-      path: ['storage', 'orphans', 'clean'],
-      capability: 'osx.storage.orphans.clean',
-      summary: 'Move selected verified application remnants to Trash.',
+      path: ['security', 'audit'],
+      capability: 'osx.security.audit',
+      summary: 'Report the read-only security-audit coverage and results.',
+    },
+    {
+      path: ['security', 'controls', 'list'],
+      capability: 'osx.security.controls.list',
+      summary: 'List the security-audit control catalog.',
     },
   ],
   handlers: [
     { path: ['storage', 'scan'], handler: scan },
     { path: ['storage', 'clean'], handler: clean },
     { path: ['storage', 'orphans', 'scan'], handler: scanOrphans },
-    { path: ['storage', 'orphans', 'clean'], handler: cleanOrphans },
+    { path: ['security', 'audit'], handler: audit },
+    { path: ['security', 'controls', 'list'], handler: list },
   ],
 } satisfies AnkhRuntimeCommandProvider;
 
