@@ -122,8 +122,6 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       expect(errors.join('')).toContain('only on macOS');
       errors.length = 0;
       expect(xcodeClean.exitCode).toBe(1);
-      expect(errors.join('')).toContain('only on macOS');
-      errors.length = 0;
       const xcodeScan = await runCli(['osx', 'storage', 'xcode', 'scan', '--json'], options);
       expect(xcodeScan.exitCode).toBe(1);
       expect(errors.join('')).toContain('only on macOS');
