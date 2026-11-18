@@ -11,20 +11,20 @@ import {
 
 const controlId = 'osi7-application-network-and-persistence';
 
-/*** Collect redacted resolver, Gatekeeper, service, developer-listener, and persistence metadata without scanning the host. */
+/*** Collect redacted resolver, Gatekeeper, application-assessment, service, developer-listener, and persistence metadata without scanning the host. */
 export async function collectApplicationPostureObservationAsync(
   runner: MacosSecurityCommandRunner,
   profile: SecurityAuditProfile,
   collectedAt: string,
 ): Promise<SecurityAuditObservation> {
-  const [dns, proxy, gatekeeper, signing, notarization, disabledServices, listeners] =
+  const [dns, proxy, gatekeeper, signing, applicationAssessment, disabledServices, listeners] =
     await collectApplicationPostureMetadataAsync(runner);
   const available = [
     dns,
     proxy,
     gatekeeper,
     signing,
-    notarization,
+    applicationAssessment,
     disabledServices,
     listeners,
   ].filter((result) => result.exitCode === 0);
@@ -36,18 +36,19 @@ export async function collectApplicationPostureObservationAsync(
     'application-posture-metadata',
     `${available.length} read-only application-posture metadata sources were available; resolver values, proxy endpoints, paths, and process identities were discarded.`,
     createApplicationPostureFacts({
-      dnsAvailable: dns.exitCode === 0,
-      proxy: proxy.stdout,
-      gatekeeper: gatekeeper.stdout,
-      signingAvailable: signing.exitCode === 0,
-      notarizationAccepted: notarization.exitCode === 0,
-      persistenceAvailable: disabledServices.exitCode === 0,
-      listeners: listeners.stdout,
+      dnsAvailable: successfulAvailability(dns),
+      proxy: successfulOutput(proxy),
+      gatekeeper: successfulOutput(gatekeeper),
+      signingAvailable: successfulAvailability(signing),
+      applicationAssessmentAccepted: successfulAvailability(applicationAssessment),
+      persistenceAvailable: successfulAvailability(disabledServices),
+      listeners: successfulOutput(listeners),
     }),
+    available.length === 7 ? 'applicable' : 'unknown',
   );
 }
 
-/** Read fixed local commands concurrently; no command output leaves this application boundary. */
+/*** Read fixed local commands concurrently; no command output leaves this application boundary. */
 async function collectApplicationPostureMetadataAsync(runner: MacosSecurityCommandRunner) {
   return Promise.all([
     runner.runAsync(['/usr/sbin/scutil', '--dns']),
@@ -69,4 +70,17 @@ async function collectApplicationPostureMetadataAsync(runner: MacosSecurityComma
     runner.runAsync(['/bin/launchctl', 'print-disabled', 'system']),
     runner.runAsync(['/usr/sbin/netstat', '-an', '-p', 'tcp']),
   ]);
+}
+
+/*** Exclude failed collector output so missing commands cannot become application-posture facts. */
+function successfulOutput(result: {
+  readonly exitCode: number;
+  readonly stdout: string;
+}): string | undefined {
+  return result.exitCode === 0 ? result.stdout : undefined;
+}
+
+/*** Represent successful source availability without converting a failed command into a negative fact. */
+function successfulAvailability(result: { readonly exitCode: number }): true | undefined {
+  return result.exitCode === 0 ? true : undefined;
 }

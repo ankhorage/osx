@@ -5,7 +5,7 @@ import type {
   SecurityAuditProfile,
 } from '../../../types/securityAudit.js';
 
-/** Create one redacted observation whose raw macOS command output never crosses the adapter boundary. */
+/*** Create one redacted observation whose raw macOS command output never crosses the adapter boundary. */
 export function createSecurityObservation(
   controlId: string,
   profile: SecurityAuditProfile,
@@ -13,6 +13,7 @@ export function createSecurityObservation(
   kind: string,
   summary: string,
   facts: readonly SecurityAuditEvidenceBooleanFact[],
+  applicability: SecurityAuditObservation['applicability'] = 'applicable',
 ): SecurityAuditObservation {
   const evidence: SecurityAuditEvidence = {
     id: `${controlId}-metadata`,
@@ -25,10 +26,10 @@ export function createSecurityObservation(
     redacted: true,
     facts,
   };
-  return { controlId, applicability: 'applicable', access: 'available', evidence: [evidence] };
+  return { controlId, applicability, access: 'available', evidence: [evidence] };
 }
 
-/** Represent absent, denied, or unsupported host evidence without manufacturing a security conclusion. */
+/*** Represent absent, denied, or unsupported host evidence without manufacturing a security conclusion. */
 export function createUnknownSecurityObservation(controlId: string): SecurityAuditObservation {
   return { controlId, applicability: 'unknown', access: 'available', evidence: [] };
 }

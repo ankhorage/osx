@@ -31,9 +31,23 @@ export async function collectPresentationTrustObservationAsync(
     'presentation-trust-metadata',
     `${available.length} read-only trust metadata sources were available; certificate subjects, credential-store paths, and credentials were discarded.`,
     createPresentationTrustFacts({
-      trustSettingsAvailable: trustSettings.exitCode === 0,
-      keychainMetadataAvailable: keychains.exitCode === 0,
-      proxy: proxy.stdout,
+      trustSettingsAvailable: successfulAvailability(trustSettings),
+      keychainMetadataAvailable: successfulAvailability(keychains),
+      proxy: successfulOutput(proxy),
     }),
+    available.length === 3 ? 'applicable' : 'unknown',
   );
+}
+
+/*** Exclude failed proxy output so unavailable trust sources cannot imply no proxy. */
+function successfulOutput(result: {
+  readonly exitCode: number;
+  readonly stdout: string;
+}): string | undefined {
+  return result.exitCode === 0 ? result.stdout : undefined;
+}
+
+/*** Represent successful source availability without converting a failed command into a negative fact. */
+function successfulAvailability(result: { readonly exitCode: number }): true | undefined {
+  return result.exitCode === 0 ? true : undefined;
 }

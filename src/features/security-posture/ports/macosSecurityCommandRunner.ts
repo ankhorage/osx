@@ -1,4 +1,4 @@
-/** A deliberately narrow process boundary for read-only, local macOS inspection commands. */
+/*** A deliberately narrow process boundary for read-only, local macOS inspection commands. */
 export interface MacosSecurityCommandRunner {
   readonly runAsync: (
     command: readonly string[],

@@ -7,6 +7,7 @@ import {
   collectMacosSecurityPostureObservationsAsync,
   createSecurityAuditProfile,
 } from '../src/index.js';
+import { createMacosSecurityCommandRunner } from '../src/features/security-posture/adapters/createMacosSecurityCommandRunner.js';
 import type { MacosSecurityCommandRunner } from '../src/features/security-posture/ports/macosSecurityCommandRunner.js';
 
 const profile = createSecurityAuditProfile();
@@ -112,19 +113,100 @@ test('L7 collector detects supported Gatekeeper and non-secret network and persi
     'application-proxy-not-configured': true,
     'gatekeeper-assessments-enabled': true,
     'system-application-signing-observable': true,
-    'system-application-notarization-assessment-accepted': true,
+    'system-application-assessment-accepted': true,
     'system-persistence-metadata-observable': true,
     'common-developer-listeners-not-observed': true,
   });
   expect(facts(developerService)).toMatchObject({
     'application-proxy-not-configured': false,
     'gatekeeper-assessments-enabled': false,
-    'system-application-signing-observable': false,
-    'system-application-notarization-assessment-accepted': false,
     'common-developer-listeners-not-observed': false,
   });
   expect(JSON.stringify(protectedObservation)).not.toContain('192.0.2.53');
 });
+
+test('partial source availability remains unknown and omits facts from failed sources', async () => {
+  const observation = await collectApplicationPostureObservationAsync(
+    createRunner({
+      '/usr/sbin/scutil --dns': output('resolver #1'),
+      '/usr/sbin/scutil --proxy': unavailable(),
+      '/usr/sbin/spctl --status': unavailable(),
+      '/usr/bin/codesign -dv --verbose=2 /System/Applications/Calculator.app':
+        output('Authority=Apple'),
+      '/usr/sbin/spctl --assess --type execute /System/Applications/Calculator.app':
+        output('accepted'),
+      '/bin/launchctl print-disabled system': output(''),
+      '/usr/sbin/netstat -an -p tcp': output('tcp4 0 0 *.443 *.* LISTEN'),
+    }),
+    profile,
+    collectedAt,
+  );
+
+  expect(observation.applicability).toBe('unknown');
+  expect(facts(observation)).not.toHaveProperty('application-proxy-not-configured');
+  expect(facts(observation)).not.toHaveProperty('gatekeeper-assessments-enabled');
+});
+
+test('failed sharing and proxy sources never manufacture absence facts', async () => {
+  const [sessionObservation, trustObservation] = await Promise.all([
+    collectSessionExposureObservationAsync(
+      createRunner({
+        '/usr/sbin/systemsetup -getremotelogin': output('Remote Login: Off'),
+        '/usr/sbin/sharing -l': unavailable(),
+        '/bin/launchctl print-disabled system': output(''),
+        '/usr/sbin/netstat -an -p tcp': unavailable(),
+      }),
+      profile,
+      collectedAt,
+    ),
+    collectPresentationTrustObservationAsync(
+      createRunner({
+        '/usr/bin/security dump-trust-settings -d': output('Trust Settings'),
+        '/usr/bin/security list-keychains -d user': output('metadata'),
+        '/usr/sbin/scutil --proxy': unavailable(),
+      }),
+      profile,
+      collectedAt,
+    ),
+  ]);
+
+  expect(sessionObservation.applicability).toBe('unknown');
+  expect(facts(sessionObservation)).not.toHaveProperty('screen-sharing-not-advertised');
+  expect(facts(sessionObservation)).not.toHaveProperty('common-remote-listeners-not-observed');
+  expect(trustObservation.applicability).toBe('unknown');
+  expect(facts(trustObservation)).not.toHaveProperty('explicit-interception-proxy-not-configured');
+});
+
+test.skipIf(process.platform !== 'darwin')(
+  'native command runner bounds time, output, and errors without retaining command diagnostics',
+  async () => {
+    const runner = createMacosSecurityCommandRunner({
+      maximumOutputBytes: 8,
+      timeoutMilliseconds: 50,
+    });
+    const [timeout, oversizedOutput, commandFailure, startFailure] = await Promise.all([
+      runner.runAsync(['/bin/sh', '-c', 'sleep 1']),
+      runner.runAsync(['/bin/sh', '-c', 'printf super-secret-output']),
+      runner.runAsync(['/bin/sh', '-c', 'printf command-secret >&2; exit 1']),
+      runner.runAsync(['/private/not-a-real-collector-secret']),
+    ]);
+
+    expect(timeout).toEqual({ exitCode: 1, stdout: '', stderr: 'Collector command timed out.' });
+    expect(oversizedOutput).toEqual({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'Collector command failed.',
+    });
+    expect(commandFailure).toEqual({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'Collector command failed.',
+    });
+    expect(JSON.stringify(commandFailure)).not.toContain('command-secret');
+    expect(startFailure.stdout).toBe('');
+    expect(JSON.stringify(startFailure)).not.toContain('not-a-real-collector-secret');
+  },
+);
 
 test('each collector is unknown when all read-only sources are unavailable', async () => {
   const unavailable = createRunner({});

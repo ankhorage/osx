@@ -34,10 +34,19 @@ export async function collectSessionExposureObservationAsync(
     'remote-session-metadata',
     `${available.length} read-only remote-session metadata sources were available; no account, address, or session identity was retained.`,
     createSessionExposureFacts({
-      remoteLogin: remoteLogin.stdout,
-      sharing: sharing.stdout,
-      disabledServices: disabledServices.stdout,
-      listeners: listeners.stdout,
+      remoteLogin: successfulOutput(remoteLogin),
+      sharing: successfulOutput(sharing),
+      disabledServices: successfulOutput(disabledServices),
+      listeners: successfulOutput(listeners),
     }),
+    available.length === 4 ? 'applicable' : 'unknown',
   );
+}
+
+/*** Exclude failed collector output so absence never becomes a remote-session security fact. */
+function successfulOutput(result: {
+  readonly exitCode: number;
+  readonly stdout: string;
+}): string | undefined {
+  return result.exitCode === 0 ? result.stdout : undefined;
 }
