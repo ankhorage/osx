@@ -39,14 +39,14 @@ export interface SecurityNetworkPacketFilterEvidence {
   readonly protectionEffect: 'not-established';
 }
 
-/** Aggregate Layer 4 binding facts with endpoints, PIDs, users, and process paths removed. */
+/** Aggregate Layer 4 binding facts with endpoints, PIDs, users, and process paths removed; a non-loopback binding is not proof of remote reachability. */
 export interface SecurityNetworkLayer4Evidence {
   readonly tcpListenersAvailability: SecurityNetworkEvidenceAvailability;
   readonly tcpLoopbackListenerCount: SecurityNetworkObserved<number>;
-  readonly tcpExternallyReachableListenerCount: SecurityNetworkObserved<number>;
+  readonly tcpNonLoopbackListenerCount: SecurityNetworkObserved<number>;
   readonly udpBindingsAvailability: SecurityNetworkEvidenceAvailability;
   readonly udpLoopbackBindingCount: SecurityNetworkObserved<number>;
-  readonly udpExternallyReachableBindingCount: SecurityNetworkObserved<number>;
+  readonly udpNonLoopbackBindingCount: SecurityNetworkObserved<number>;
   readonly processAttribution: 'not-established';
   readonly quic: 'unknown';
 }

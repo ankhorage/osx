@@ -9,6 +9,7 @@ const controls: readonly SecurityAuditControl[] = [
   control(
     'osi1-physical-interface-inventory',
     'Physical interface and attached-device exposure',
+    'Software-visible interfaces and attached-device exposure; physical safeguards require manual review.',
     1,
     [],
     'passive',
@@ -17,6 +18,7 @@ const controls: readonly SecurityAuditControl[] = [
   control(
     'osi2-link-security',
     'Link-layer network security',
+    'Wi-Fi, link trust, and discoverability when supported local evidence is available.',
     2,
     [],
     'api',
@@ -25,6 +27,7 @@ const controls: readonly SecurityAuditControl[] = [
   control(
     'osi3-routing-and-filtering',
     'Network routing and packet-filter posture',
+    'Routes, forwarding, VPN placement, and packet-filter posture without treating pf as a public API.',
     3,
     [4],
     'passive',
@@ -33,6 +36,7 @@ const controls: readonly SecurityAuditControl[] = [
   control(
     'osi4-service-exposure',
     'Transport service exposure and application firewall',
+    'Listening-service exposure and the Apple Application Firewall, separate from packet filtering.',
     4,
     [3],
     'passive',
@@ -41,6 +45,7 @@ const controls: readonly SecurityAuditControl[] = [
   control(
     'osi5-remote-session-services',
     'Remote session and sharing services',
+    'Remote login, sharing services, and session exposure where supported local evidence is available.',
     5,
     [4, 7],
     'api',
@@ -49,6 +54,7 @@ const controls: readonly SecurityAuditControl[] = [
   control(
     'osi6-presentation-trust',
     'Presentation-layer trust and TLS indicators',
+    'Certificate trust, TLS policy, and interception indicators that require supported local evidence.',
     6,
     [7],
     'manual',
@@ -57,6 +63,7 @@ const controls: readonly SecurityAuditControl[] = [
   control(
     'osi7-application-network-and-persistence',
     'Application network posture and persistence',
+    'Resolver, proxy, application-signing, and persistence posture using non-sensitive local metadata.',
     7,
     [3, 4],
     'passive',
@@ -65,60 +72,70 @@ const controls: readonly SecurityAuditControl[] = [
   crossLayerControl(
     'hardware-startup-trust',
     'Hardware and startup trust',
+    'Startup protections and trusted extensions, independently of OSI layer classification.',
     'api',
     'Review startup security, SIP, signed system volume, and trusted extensions using supported APIs.',
   ),
   crossLayerControl(
     'disk-data',
     'Disk and data protection',
+    'Encryption and backup posture; availability is never presented as a verified restore test.',
     'api',
     'Review FileVault, external-volume encryption, backup encryption, and restore readiness without claiming a restore test occurred.',
   ),
   crossLayerControl(
     'identity-access',
     'Identity and access posture',
+    'Privilege and remote-access posture without exposing account identities or credentials.',
     'api',
     'Review local privilege, guest access, lock policy, and remote-login configuration without exposing identities.',
   ),
   crossLayerControl(
     'privacy-permissions',
     'Privacy and permissions posture',
+    'Privacy, profile, and background-item metadata without bypassing protected system databases.',
     'api',
     'Review supported TCC, profile, and background-item metadata without bypassing protected databases.',
   ),
   crossLayerControl(
     'malware-integrity',
     'Malware defenses and integrity',
+    'Integrity defenses and cautious indicators, never a malware-identification claim from heuristics.',
     'api',
     'Review Gatekeeper, XProtect, signatures, quarantine, and persistence indicators without asserting malware detection from heuristics.',
   ),
   crossLayerControl(
     'patching-exposure',
     'Patching and exposure posture',
+    'Update posture and reliable version evidence, without guessing vulnerability status.',
     'api',
     'Review update policy and reliable version evidence; do not infer vulnerabilities without advisory matching.',
   ),
   crossLayerControl(
     'network-trust',
     'Network and trust configuration',
+    'Cross-layer trust controls such as VPN, DNS, proxies, firewall, and remote access.',
     'passive',
     'Review Wi-Fi, VPN, DNS, proxies, firewall controls, and remote access as distinct controls.',
   ),
   crossLayerControl(
     'development-supply-chain',
     'Development and supply-chain posture',
+    'Development metadata and supply-chain controls without reading or exporting secret contents.',
     'passive',
     'Review metadata such as lockfile or signing posture without reading or exporting secrets.',
   ),
   crossLayerControl(
     'backups-resilience-logging',
     'Backups, resilience, logging, and monitoring',
+    'Backup, logging, and response-readiness posture without claiming a recovery test.',
     'api',
     'Review backup and logging status without treating availability as a verified recovery test.',
   ),
   crossLayerControl(
     'enterprise-policy',
     'Enterprise and managed-device policy',
+    'Observable managed controls, without self-certifying policy compliance from partial evidence.',
     'api',
     'Report managed controls when observable; never self-certify compliance from partial evidence.',
   ),
@@ -128,6 +145,7 @@ const controls: readonly SecurityAuditControl[] = [
 function control(
   id: string,
   title: string,
+  description: string,
   layer: 1 | 2 | 3 | 4 | 5 | 6 | 7,
   crossReferenceLayers: readonly (1 | 2 | 3 | 4 | 5 | 6 | 7)[],
   detectionMode: SecurityAuditControl['detectionMode'],
@@ -136,6 +154,7 @@ function control(
   return {
     id,
     title,
+    description,
     primaryCategory: { kind: 'osi', layer },
     crossReferences: crossReferenceLayers.map((referencedLayer) => ({
       kind: 'osi',
@@ -155,12 +174,14 @@ function control(
 function crossLayerControl(
   theme: Extract<SecurityAuditControl['primaryCategory'], { kind: 'cross-layer' }>['theme'],
   title: string,
+  description: string,
   detectionMode: SecurityAuditControl['detectionMode'],
   recommendation: string,
 ): SecurityAuditControl {
   return {
     id: `cross-layer-${theme}`,
     title,
+    description,
     primaryCategory: { kind: 'cross-layer', theme },
     crossReferences: [],
     supportedPlatforms: ['macos'],

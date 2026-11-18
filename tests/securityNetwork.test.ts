@@ -75,21 +75,21 @@ test('keeps pf and ALF distinct and reports permission-denied pf sources without
   );
 });
 
-test('classifies bindings without claiming process attribution', async () => {
+test('classifies IPv4 127/8 and IPv6 ::1 bindings without claiming remote reachability or process attribution', async () => {
   const evidence = await collectSecurityNetworkAsync(
     host({
-      'lsof -nP -iTCP -sTCP:LISTEN': `COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nprivate-server 123 alice TCP 127.0.0.1:3000 (LISTEN)\nprivate-server 124 alice TCP *:443 (LISTEN)`,
-      'lsof -nP -iUDP': `COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nprivate-server 125 alice UDP [::1]:5353\nprivate-server 126 alice UDP *:5353`,
+      'lsof -nP -iTCP -sTCP:LISTEN': `COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nprivate-server 123 alice TCP 127.0.0.0:3000 (LISTEN)\nprivate-server 124 alice TCP 127.255.255.255:3001 (LISTEN)\nprivate-server 125 alice TCP [::1]:3002 (LISTEN)\nprivate-server 126 alice TCP *:443 (LISTEN)`,
+      'lsof -nP -iUDP': `COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nprivate-server 127 alice UDP 127.0.0.2:5353\nprivate-server 128 alice UDP [::1]:5354\nprivate-server 129 alice UDP *:5355`,
     }),
   );
 
   expect(evidence.layer4).toEqual({
     tcpListenersAvailability: 'available',
-    tcpLoopbackListenerCount: 1,
-    tcpExternallyReachableListenerCount: 1,
+    tcpLoopbackListenerCount: 3,
+    tcpNonLoopbackListenerCount: 1,
     udpBindingsAvailability: 'available',
-    udpLoopbackBindingCount: 1,
-    udpExternallyReachableBindingCount: 1,
+    udpLoopbackBindingCount: 2,
+    udpNonLoopbackBindingCount: 1,
     processAttribution: 'not-established',
     quic: 'unknown',
   });
@@ -128,10 +128,10 @@ test('keeps unavailable, partial, and timed-out sources distinct from zero obser
   expect(evidence.layer4).toMatchObject({
     tcpListenersAvailability: 'unsupported',
     tcpLoopbackListenerCount: 'unknown',
-    tcpExternallyReachableListenerCount: 'unknown',
+    tcpNonLoopbackListenerCount: 'unknown',
     udpBindingsAvailability: 'available',
     udpLoopbackBindingCount: 0,
-    udpExternallyReachableBindingCount: 0,
+    udpNonLoopbackBindingCount: 0,
   });
   expect(evidence.applicationFirewall).toEqual({
     globalStateAvailability: 'timeout',

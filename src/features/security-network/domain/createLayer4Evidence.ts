@@ -23,10 +23,10 @@ export function createLayer4Evidence(
     layer4: {
       tcpListenersAvailability: availability(tcpListeners),
       tcpLoopbackListenerCount: tcp.loopback,
-      tcpExternallyReachableListenerCount: tcp.external,
+      tcpNonLoopbackListenerCount: tcp.nonLoopback,
       udpBindingsAvailability: availability(udpBindings),
       udpLoopbackBindingCount: udp.loopback,
-      udpExternallyReachableBindingCount: udp.external,
+      udpNonLoopbackBindingCount: udp.nonLoopback,
       processAttribution: 'not-established',
       quic: 'unknown',
     },
@@ -46,23 +46,23 @@ function countBindings(
   protocol: 'TCP' | 'UDP',
 ): {
   readonly loopback: SecurityNetworkObserved<number>;
-  readonly external: SecurityNetworkObserved<number>;
+  readonly nonLoopback: SecurityNetworkObserved<number>;
 } {
-  if (result.status !== 'completed') return { loopback: 'unknown', external: 'unknown' };
+  if (result.status !== 'completed') return { loopback: 'unknown', nonLoopback: 'unknown' };
   return result.stdout.split('\n').reduce(
     (counts, line) => {
       if (!new RegExp(`\\b${protocol}\\b`).test(line)) return counts;
       return isLoopbackBinding(line)
         ? { ...counts, loopback: counts.loopback + 1 }
-        : { ...counts, external: counts.external + 1 };
+        : { ...counts, nonLoopback: counts.nonLoopback + 1 };
     },
-    { loopback: 0, external: 0 },
+    { loopback: 0, nonLoopback: 0 },
   );
 }
 
-/** Recognize the loopback literals in lsof socket rows. */
+/** Recognize the IPv4 127/8 and IPv6 ::1 loopback bindings in lsof socket rows. */
 function isLoopbackBinding(line: string): boolean {
-  return /(?:127\.0\.0\.1|\[::1\]|localhost)(?::|\s|$)/i.test(line);
+  return /(?:127(?:\.\d{1,3}){3}|\[::1\]|localhost)(?::|\s|$)/i.test(line);
 }
 
 /** Map one command result to an explicit source availability without aggregation. */
