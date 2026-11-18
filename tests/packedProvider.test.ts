@@ -151,10 +151,17 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     errors.length = 0;
     output.length = 0;
     const scan = await runCli(['osx', 'storage', 'scan', '--json'], options);
-    const xcodeClean = await runCli(['osx', 'storage', 'xcode', 'clean', '--dry-run'], options);
     if (process.platform === 'darwin') {
       expect(scan.exitCode).toBe(0);
       expect(JSON.parse(output.join('')).candidates).toBeArray();
+      output.length = 0;
+      const xcodeClean = await runCli(['osx', 'storage', 'xcode', 'clean', '--dry-run'], {
+        ...options,
+        context: {
+          ...context,
+          interaction: { interactive: false, confirm: async () => 'declined' as const },
+        },
+      });
       expect(xcodeClean.exitCode).toBe(1);
       expect(errors.join('')).toContain('Interactive confirmation is required');
       if (process.env.ANKH_NATIVE_CORESIMULATOR_ACCEPTANCE === '1') {
@@ -175,6 +182,7 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       expect(scan.exitCode).toBe(1);
       expect(errors.join('')).toContain('only on macOS');
       errors.length = 0;
+      const xcodeClean = await runCli(['osx', 'storage', 'xcode', 'clean', '--dry-run'], options);
       expect(xcodeClean.exitCode).toBe(1);
       const xcodeScan = await runCli(['osx', 'storage', 'xcode', 'scan', '--json'], options);
       expect(xcodeScan.exitCode).toBe(1);
