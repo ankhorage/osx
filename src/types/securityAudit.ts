@@ -34,6 +34,7 @@ export type SecurityAuditApplicability = 'applicable' | 'not-applicable' | 'unkn
 export interface SecurityAuditBaseline {
   readonly profileId: string;
   readonly expectedSecureCondition: string;
+  readonly failureSeverity: SecurityAuditSeverity;
 }
 
 /** Human guidance remains local and never performs remediation automatically. */
@@ -45,10 +46,14 @@ export interface SecurityAuditRecommendation {
 /** A redacted, serializable fact collected for one control. */
 export interface SecurityAuditEvidence {
   readonly id: string;
+  readonly controlId: string;
+  readonly profileId: string;
+  readonly baselineVersion: string;
   readonly kind: string;
   readonly summary: string;
   readonly collectedAt: string;
   readonly redacted: true;
+  readonly baselineStatus: 'satisfied' | 'violated';
 }
 
 /** A stable control definition; concrete collectors remain outside this portable model. */
@@ -79,12 +84,23 @@ export interface SecurityAuditProfile {
 export interface SecurityAuditObservation {
   readonly controlId: string;
   readonly applicability: SecurityAuditApplicability;
-  readonly coverage: Exclude<SecurityAuditCoverage, 'unsupported'>;
-  readonly outcome: SecurityAuditOutcome;
-  readonly severity: SecurityAuditSeverity;
-  readonly confidence: SecurityAuditConfidence;
+  readonly access: 'available' | 'permission-blocked';
   readonly evidence: readonly SecurityAuditEvidence[];
-  readonly recommendation?: SecurityAuditRecommendation;
+}
+
+/** Explain the engine-owned evidence decision behind a result. */
+export interface SecurityAuditBaselineEvaluation {
+  readonly profileId: string;
+  readonly expectedSecureCondition: string;
+  readonly status:
+    | 'verified'
+    | 'missing-evidence'
+    | 'invalid-evidence'
+    | 'inaccessible-evidence'
+    | 'applicability-unknown'
+    | 'contradictory-evidence'
+    | 'profile-incompatible';
+  readonly evidenceIds: readonly string[];
 }
 
 export interface SecurityAuditResult {
@@ -96,6 +112,7 @@ export interface SecurityAuditResult {
   readonly confidence: SecurityAuditConfidence;
   readonly evidence: readonly SecurityAuditEvidence[];
   readonly recommendation: SecurityAuditRecommendation;
+  readonly baseline: SecurityAuditBaselineEvaluation;
 }
 
 export interface SecurityAuditCoverageTotals {

@@ -150,6 +150,7 @@ function control(
         profileId: 'macos-informational',
         expectedSecureCondition:
           'No insecure exposure is evidenced by a supported read-only collector.',
+        failureSeverity: 'medium',
       },
     ],
     sourceReferences: ['https://support.apple.com/guide/security/welcome/web'],
@@ -178,6 +179,7 @@ function crossLayerControl(
         profileId: 'macos-informational',
         expectedSecureCondition:
           'No insecure exposure is evidenced by a supported read-only collector.',
+        failureSeverity: 'medium',
       },
     ],
     sourceReferences: ['https://support.apple.com/guide/security/welcome/web'],
