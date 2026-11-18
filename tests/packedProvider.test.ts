@@ -117,6 +117,20 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       expect(JSON.parse(output.join('')).candidates).toBeArray();
       expect(xcodeClean.exitCode).toBe(1);
       expect(errors.join('')).toContain('Interactive confirmation is required');
+      if (process.env.ANKH_NATIVE_CORESIMULATOR_ACCEPTANCE === '1') {
+        output.length = 0;
+        const xcodeScan = await runCli(['osx', 'storage', 'xcode', 'scan', '--json'], options);
+        expect(xcodeScan.exitCode).toBe(0);
+        const candidates = JSON.parse(output.join('')) as {
+          readonly candidates: readonly { readonly id: string; readonly risk: string }[];
+        };
+        expect(candidates.candidates).toBeArray();
+        expect(
+          candidates.candidates.some(
+            (candidate) => candidate.id === 'xcode-runtimes' && candidate.risk === 'report-only',
+          ),
+        ).toBeFalse();
+      }
     } else {
       expect(scan.exitCode).toBe(1);
       expect(errors.join('')).toContain('only on macOS');
