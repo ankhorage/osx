@@ -79,6 +79,7 @@ export interface SecurityAuditEvidence {
 export interface SecurityAuditControl {
   readonly id: string;
   readonly title: string;
+  readonly description: string;
   readonly primaryCategory: SecurityAuditCategory;
   readonly crossReferences: readonly SecurityAuditCategory[];
   readonly supportedPlatforms: readonly 'macos'[];
