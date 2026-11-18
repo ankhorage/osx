@@ -39,6 +39,26 @@ test('collects one observation per control and separately redacts each recognize
   ).toBe(true);
 });
 
+test.skipIf(process.platform !== 'darwin')(
+  'collects the real macOS host only through fixed redacted observation boundaries',
+  () => {
+    const observations = collectMacosHostSecurityObservations();
+    const serialized = JSON.stringify(observations);
+
+    expect(observations).toHaveLength(6);
+    expect(new Set(observations.map((observation) => observation.controlId)).size).toBe(
+      observations.length,
+    );
+    expect(
+      observations
+        .flatMap((observation) => observation.evidence)
+        .every((evidence) => evidence.redacted),
+    ).toBe(true);
+    expect(serialized).not.toContain(process.env.HOME ?? '');
+    expect(serialized).not.toContain('BEGIN');
+  },
+);
+
 test('integrates separately validated SIP and Authenticated Root facts through runSecurityAudit', () => {
   const report = runSecurityAudit(
     controlsWithHardwareBaseline(),
