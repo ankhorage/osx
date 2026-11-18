@@ -2,6 +2,7 @@ import type {
   SecurityNetworkApplicationFirewallEvidence,
   SecurityNetworkEvidenceAvailability,
   SecurityNetworkLayer4Evidence,
+  SecurityNetworkObserved,
   SecurityNetworkSetting,
 } from '../../../types/securityNetwork.js';
 import type { SecurityNetworkCommandResult } from '../ports/securityNetworkHost.js';
@@ -18,31 +19,36 @@ export function createLayer4Evidence(
 } {
   const tcp = countBindings(tcpListeners, 'TCP');
   const udp = countBindings(udpBindings, 'UDP');
-
   return {
     layer4: {
+      tcpListenersAvailability: availability(tcpListeners),
       tcpLoopbackListenerCount: tcp.loopback,
       tcpExternallyReachableListenerCount: tcp.external,
+      udpBindingsAvailability: availability(udpBindings),
       udpLoopbackBindingCount: udp.loopback,
       udpExternallyReachableBindingCount: udp.external,
-      processAttribution: sourceAvailability(tcpListeners, udpBindings),
+      processAttribution: 'not-established',
       quic: 'unknown',
     },
     applicationFirewall: {
+      globalStateAvailability: availability(applicationFirewall),
       globalState: parseApplicationFirewallSetting(applicationFirewall),
+      stealthModeAvailability: availability(stealthMode),
       stealthMode: parseApplicationFirewallSetting(stealthMode),
-      availability: sourceAvailability(applicationFirewall, stealthMode),
       protectionEffect: 'not-established',
     },
   };
 }
 
-/** Classify socket bindings without retaining endpoints, ports, process names, PIDs, users, or paths. */
+/** Classify socket bindings only after a completed source, retaining no endpoint or process metadata. */
 function countBindings(
   result: SecurityNetworkCommandResult,
   protocol: 'TCP' | 'UDP',
-): { readonly loopback: number; readonly external: number } {
-  if (result.exitCode !== 0) return { loopback: 0, external: 0 };
+): {
+  readonly loopback: SecurityNetworkObserved<number>;
+  readonly external: SecurityNetworkObserved<number>;
+} {
+  if (result.status !== 'completed') return { loopback: 'unknown', external: 'unknown' };
   return result.stdout.split('\n').reduce(
     (counts, line) => {
       if (!new RegExp(`\\b${protocol}\\b`).test(line)) return counts;
@@ -59,23 +65,16 @@ function isLoopbackBinding(line: string): boolean {
   return /(?:127\.0\.0\.1|\[::1\]|localhost)(?::|\s|$)/i.test(line);
 }
 
-/** Determine whether all required local sources were available without exposing command output. */
-function sourceAvailability(
-  ...results: readonly SecurityNetworkCommandResult[]
-): SecurityNetworkEvidenceAvailability {
-  if (results.every((result) => result.exitCode === 0)) return 'available';
-  return results.some((result) =>
-    /operation not permitted|permission denied|not permitted/i.test(result.stdout),
-  )
-    ? 'permission-blocked'
-    : 'unavailable';
+/** Map one command result to an explicit source availability without aggregation. */
+function availability(result: SecurityNetworkCommandResult): SecurityNetworkEvidenceAvailability {
+  return result.status === 'completed' ? 'available' : result.status;
 }
 
 /** Interpret the supported ALF state text conservatively. */
 function parseApplicationFirewallSetting(
   result: SecurityNetworkCommandResult,
 ): SecurityNetworkSetting {
-  if (result.exitCode !== 0) return 'unknown';
+  if (result.status !== 'completed') return 'unknown';
   if (/\b(enabled|state\s*=\s*1)\b/i.test(result.stdout)) return 'enabled';
   if (/\b(disabled|state\s*=\s*0)\b/i.test(result.stdout)) return 'disabled';
   return 'unknown';

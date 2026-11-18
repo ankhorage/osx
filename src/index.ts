@@ -8,6 +8,7 @@ export { collectSecurityNetworkAsync } from './features/security-network/applica
 export { collectDefaultSecurityNetworkAsync } from './features/security-network/composition/collectDefaultSecurityNetworkAsync.js';
 export type {
   SecurityNetworkCommandResult,
+  SecurityNetworkCommandStatus,
   SecurityNetworkHost,
 } from './features/security-network/ports/securityNetworkHost.js';
 export { cleanStorageAsync } from './features/storage/application/cleanStorageAsync.js';
@@ -47,6 +48,7 @@ export type {
   SecurityNetworkEvidenceAvailability,
   SecurityNetworkLayer3Evidence,
   SecurityNetworkLayer4Evidence,
+  SecurityNetworkObserved,
   SecurityNetworkPacketFilterEvidence,
   SecurityNetworkSetting,
 } from './types/securityNetwork.js';

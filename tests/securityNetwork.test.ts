@@ -1,14 +1,15 @@
 import { expect, test } from 'bun:test';
 
+import { executeSecurityNetworkCommandAsync } from '../src/features/security-network/adapters/outbound/executeSecurityNetworkCommandAsync.js';
 import { collectSecurityNetworkAsync } from '../src/index.js';
 import type { SecurityNetworkCommandResult, SecurityNetworkHost } from '../src/index.js';
 
 test('collects IPv4, IPv6, routing, tunnel, and pf evidence without retaining sensitive network values', async () => {
   const evidence = await collectSecurityNetworkAsync(
     host({
-      'ifconfig -a': `en0: flags=1\n\tinet 192.0.2.7 netmask 0xffffff00\n\tinet6 2001:db8::7 prefixlen 64\nutun3: flags=1\n\tinet6 fe80::3 prefixlen 64`,
-      'netstat -rn -f inet': 'default 192.0.2.1 UGSc\n192.0.2/24 link#4',
-      'netstat -rn -f inet6': 'default fe80::1%en0 UGSc\n::1 ::1',
+      'ifconfig -a': `en0: flags=1\n\tinet 192.0.2.7\n\tinet6 2001:db8::7\nutun3: flags=1\n\tinet6 fe80::3`,
+      'netstat -rn -f inet': 'default 192.0.2.1 UGSc',
+      'netstat -rn -f inet6': 'default fe80::1%en0 UGSc',
       'sysctl -n net.inet.ip.forwarding': '0',
       'sysctl -n net.inet6.ip6.forwarding': '1',
       'scutil --nc list': '* (Connected) ABCD VPN\n  (Disconnected) EFGH VPN',
@@ -20,6 +21,7 @@ test('collects IPv4, IPv6, routing, tunnel, and pf evidence without retaining se
   );
 
   expect(evidence.layer3).toMatchObject({
+    interfacesAvailability: 'available',
     interfaceCount: 2,
     ipv4AddressCount: 1,
     ipv6AddressCount: 2,
@@ -41,12 +43,12 @@ test('collects IPv4, IPv6, routing, tunnel, and pf evidence without retaining se
   expect(JSON.stringify(evidence)).not.toContain('com.example');
 });
 
-test('keeps pf and ALF distinct and reports unreadable pf sources without a protection claim', async () => {
+test('keeps pf and ALF distinct and reports permission-denied pf sources without a protection claim', async () => {
   const evidence = await collectSecurityNetworkAsync(
     host({
-      'pfctl -s info': result('operation not permitted', 1),
-      'pfctl -sr': result('permission denied', 1),
-      'pfctl -s Anchors': result('permission denied', 1),
+      'pfctl -s info': result('operation not permitted', 1, 'permission-denied'),
+      'pfctl -sr': result('permission denied', 1, 'permission-denied'),
+      'pfctl -s Anchors': result('permission denied', 1, 'permission-denied'),
       '/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate':
         'Firewall is enabled. (State = 1)',
       '/usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode': 'Stealth mode enabled',
@@ -55,15 +57,17 @@ test('keeps pf and ALF distinct and reports unreadable pf sources without a prot
 
   expect(evidence.packetFilter).toMatchObject({
     status: 'unknown',
-    statusAvailability: 'permission-blocked',
-    rulesAvailability: 'permission-blocked',
-    anchorsAvailability: 'permission-blocked',
+    statusAvailability: 'permission-denied',
+    rulesAvailability: 'permission-denied',
+    anchorsAvailability: 'permission-denied',
+    readableRuleCount: 'unknown',
     protectionEffect: 'not-established',
   });
   expect(evidence.applicationFirewall).toEqual({
+    globalStateAvailability: 'available',
     globalState: 'enabled',
+    stealthModeAvailability: 'available',
     stealthMode: 'enabled',
-    availability: 'available',
     protectionEffect: 'not-established',
   });
   expect(evidence.protectionLimitations).toContain(
@@ -71,21 +75,22 @@ test('keeps pf and ALF distinct and reports unreadable pf sources without a prot
   );
 });
 
-test('classifies loopback and externally reachable bindings without disclosing process metadata', async () => {
+test('classifies bindings without claiming process attribution', async () => {
   const evidence = await collectSecurityNetworkAsync(
     host({
-      'lsof -nP -iTCP -sTCP:LISTEN': `COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nprivate-server 123 alice 1u IPv4 0x0 0t0 TCP 127.0.0.1:3000 (LISTEN)\nprivate-server 124 alice 1u IPv6 0x0 0t0 TCP *:443 (LISTEN)`,
-      'lsof -nP -iUDP':
-        'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nprivate-server 125 alice 1u IPv6 0x0 0t0 UDP [::1]:5353\nprivate-server 126 alice 1u IPv4 0x0 0t0 UDP *:5353',
+      'lsof -nP -iTCP -sTCP:LISTEN': `COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nprivate-server 123 alice TCP 127.0.0.1:3000 (LISTEN)\nprivate-server 124 alice TCP *:443 (LISTEN)`,
+      'lsof -nP -iUDP': `COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nprivate-server 125 alice UDP [::1]:5353\nprivate-server 126 alice UDP *:5353`,
     }),
   );
 
   expect(evidence.layer4).toEqual({
+    tcpListenersAvailability: 'available',
     tcpLoopbackListenerCount: 1,
     tcpExternallyReachableListenerCount: 1,
+    udpBindingsAvailability: 'available',
     udpLoopbackBindingCount: 1,
     udpExternallyReachableBindingCount: 1,
-    processAttribution: 'available',
+    processAttribution: 'not-established',
     quic: 'unknown',
   });
   expect(JSON.stringify(evidence)).not.toContain('private-server');
@@ -93,27 +98,71 @@ test('classifies loopback and externally reachable bindings without disclosing p
   expect(JSON.stringify(evidence)).not.toContain('3000');
 });
 
-test('fails closed on unavailable socket and ALF sources while keeping QUIC unknown', async () => {
+test('keeps unavailable, partial, and timed-out sources distinct from zero observations', async () => {
   const evidence = await collectSecurityNetworkAsync(
     host({
-      'lsof -nP -iTCP -sTCP:LISTEN': result('lsof: unavailable', 127),
-      'lsof -nP -iUDP': result('lsof: unavailable', 127),
-      '/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate': result('not found', 127),
-      '/usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode': result('not found', 127),
+      'ifconfig -a': result('permission denied', 1, 'permission-denied'),
+      'netstat -rn -f inet': result('', null, 'timeout'),
+      'netstat -rn -f inet6': 'default fe80::1%en0 UGSc',
+      'lsof -nP -iTCP -sTCP:LISTEN': result('not found', 127, 'unsupported'),
+      'lsof -nP -iUDP': 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME',
+      '/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate': result(
+        '',
+        null,
+        'timeout',
+      ),
+      '/usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode': 'Stealth mode enabled',
     }),
   );
 
+  expect(evidence.layer3).toMatchObject({
+    interfacesAvailability: 'permission-denied',
+    interfaceCount: 'unknown',
+    ipv4AddressCount: 'unknown',
+    ipv6AddressCount: 'unknown',
+    ipv4RoutesAvailability: 'timeout',
+    ipv4DefaultGatewayObserved: 'unknown',
+    ipv6RoutesAvailability: 'available',
+    ipv6DefaultGatewayObserved: true,
+  });
   expect(evidence.layer4).toMatchObject({
-    tcpExternallyReachableListenerCount: 0,
+    tcpListenersAvailability: 'unsupported',
+    tcpLoopbackListenerCount: 'unknown',
+    tcpExternallyReachableListenerCount: 'unknown',
+    udpBindingsAvailability: 'available',
+    udpLoopbackBindingCount: 0,
     udpExternallyReachableBindingCount: 0,
-    processAttribution: 'unavailable',
-    quic: 'unknown',
   });
-  expect(evidence.applicationFirewall).toMatchObject({
+  expect(evidence.applicationFirewall).toEqual({
+    globalStateAvailability: 'timeout',
     globalState: 'unknown',
-    stealthMode: 'unknown',
-    availability: 'unavailable',
+    stealthModeAvailability: 'available',
+    stealthMode: 'enabled',
+    protectionEffect: 'not-established',
   });
+});
+
+test('kills a hanging host command at its timeout', async () => {
+  const outcome = await executeSecurityNetworkCommandAsync(['/bin/sh', '-c', 'sleep 2'], {
+    timeoutMs: 20,
+  });
+  expect(outcome).toMatchObject({ exitCode: expect.any(Number), status: 'timeout' });
+});
+
+test('kills a noisy host command after the shared output cap', async () => {
+  const outcome = await executeSecurityNetworkCommandAsync(
+    ['/bin/sh', '-c', 'while :; do printf 1234567890; done'],
+    { outputLimitBytes: 128 },
+  );
+  expect(outcome).toMatchObject({ status: 'output-limited' });
+  expect(new TextEncoder().encode(outcome.stdout).byteLength).toBeLessThanOrEqual(128);
+});
+
+test('reports an unavailable executable as unsupported instead of a zero observation', async () => {
+  const outcome = await executeSecurityNetworkCommandAsync([
+    '/definitely-unavailable-security-command',
+  ]);
+  expect(outcome).toMatchObject({ exitCode: null, status: 'unsupported' });
 });
 
 /** Create a deterministic, no-side-effect host fixture for all collector commands. */
@@ -129,7 +178,11 @@ function host(
   };
 }
 
-/** Create an explicit local-command result fixture. */
-function result(stdout: string, exitCode = 0): SecurityNetworkCommandResult {
-  return { exitCode, stdout };
+/** Create an explicit bounded local-command result fixture. */
+function result(
+  stdout: string,
+  exitCode: number | null = 0,
+  status: SecurityNetworkCommandResult['status'] = 'completed',
+): SecurityNetworkCommandResult {
+  return { exitCode, stdout, status };
 }
