@@ -8,6 +8,12 @@ export { cleanStorageAsync } from './features/storage/application/cleanStorageAs
 export { scanOrphanedApplicationsAsync } from './features/storage/application/scanOrphanedApplicationsAsync.js';
 export { scanStorageAsync } from './features/storage/composition/scanStorageAsync.js';
 export type {
+  OrphanedApplicationEvidenceAvailability,
+  OrphanedApplicationEvidenceSource,
+  OrphanedApplicationHost,
+  OrphanedApplicationObservation,
+} from './types/orphanedApplications.js';
+export type {
   SecurityAuditApplicability,
   SecurityAuditBaseline,
   SecurityAuditBaselinePredicate,
@@ -29,12 +35,6 @@ export type {
   SecurityAuditResult,
   SecurityAuditSeverity,
 } from './types/securityAudit.js';
-export type {
-  OrphanedApplicationEvidenceAvailability,
-  OrphanedApplicationEvidenceSource,
-  OrphanedApplicationHost,
-  OrphanedApplicationObservation,
-} from './types/orphanedApplications.js';
 export type {
   StorageCandidate,
   StorageCleanupResult,

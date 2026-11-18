@@ -27,14 +27,14 @@ test('default security audit is deterministic and explicitly incomplete', () => 
       (result) =>
         result.outcome === 'unknown' &&
         result.coverage === 'unsupported' &&
-        result.baseline.status === 'missing-evidence',
+        result.baseline.status === 'profile-incompatible',
     ),
   ).toBe(true);
   expect(report.coverage.osi[1].unsupported).toBe(1);
 });
 
 test('only facts satisfying the control-owned baseline predicate may pass', () => {
-  const report = runSecurityAudit(createSecurityAuditCatalog(), profile, [
+  const report = runSecurityAudit(controlsWithPredicate(), profile, [
     observation({ evidence: [evidence()] }),
   ]);
   const result = findControl(report, controlId);
@@ -45,17 +45,47 @@ test('only facts satisfying the control-owned baseline predicate may pass', () =
   expect(result.coverage).toBe('implemented');
   expect(result.baseline).toEqual({
     profileId: profile.id,
-    expectedSecureCondition:
-      'No insecure exposure is evidenced by a supported read-only collector.',
+    expectedSecureCondition: 'No externally reachable TCP listeners were observed.',
     status: 'verified',
     evidenceIds: ['listener-summary'],
   });
 });
 
+test('catalog controls stay unsupported when no control-specific collector and predicate exist', () => {
+  const controls = createSecurityAuditCatalog();
+  const report = runSecurityAudit(
+    controls,
+    profile,
+    controls.map((control) => ({
+      controlId: control.id,
+      applicability: 'applicable' as const,
+      access: 'available' as const,
+      evidence: [
+        {
+          ...evidence(),
+          id: `${control.id}-generic-affirmation`,
+          controlId: control.id,
+          facts: [{ id: 'secure-condition-observed', value: true }],
+        },
+      ],
+    })),
+  );
+
+  expect(controls.every((control) => control.baselines.length === 0)).toBe(true);
+  expect(
+    report.results.every(
+      (result) =>
+        result.outcome === 'unknown' &&
+        result.coverage === 'unsupported' &&
+        result.baseline.status === 'profile-incompatible',
+    ),
+  ).toBe(true);
+});
+
 test('baseline violations derive failure severity and keep cross-layer coverage primary-only', () => {
-  const report = runSecurityAudit(createSecurityAuditCatalog(), profile, [
+  const report = runSecurityAudit(controlsWithPredicate(), profile, [
     observation({
-      evidence: [evidence({ facts: [{ id: 'secure-condition-observed', value: false }] })],
+      evidence: [evidence({ facts: [{ id: 'no-external-tcp-listeners', value: false }] })],
     }),
   ]);
   const result = findControl(report, controlId);
@@ -68,28 +98,28 @@ test('baseline violations derive failure severity and keep cross-layer coverage 
 
 test('missing, blocked, contradictory, and unknown applicability evidence fail closed', () => {
   const missing = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, [observation({ evidence: [] })]),
+    runSecurityAudit(controlsWithPredicate(), profile, [observation({ evidence: [] })]),
     controlId,
   );
   const blocked = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, [
+    runSecurityAudit(controlsWithPredicate(), profile, [
       observation({ access: 'permission-blocked', evidence: [evidence()] }),
     ]),
     controlId,
   );
   const contradictory = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, [
+    runSecurityAudit(controlsWithPredicate(), profile, [
       observation({
         evidence: [
-          evidence({ id: 'secure', facts: [{ id: 'secure-condition-observed', value: true }] }),
-          evidence({ id: 'insecure', facts: [{ id: 'secure-condition-observed', value: false }] }),
+          evidence({ id: 'secure', facts: [{ id: 'no-external-tcp-listeners', value: true }] }),
+          evidence({ id: 'insecure', facts: [{ id: 'no-external-tcp-listeners', value: false }] }),
         ],
       }),
     ]),
     controlId,
   );
   const unknownApplicability = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, [
+    runSecurityAudit(controlsWithPredicate(), profile, [
       observation({ applicability: 'unknown', evidence: [evidence()] }),
     ]),
     controlId,
@@ -111,25 +141,25 @@ test('missing, blocked, contradictory, and unknown applicability evidence fail c
 
 test('invalid evidence metadata and sensitive summaries cannot reach a passing result', () => {
   const invalidRedaction = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, [
+    runSecurityAudit(controlsWithPredicate(), profile, [
       observation({ evidence: [untypedEvidence({ redacted: false })] }),
     ]),
     controlId,
   );
   const mismatchedProfile = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, [
+    runSecurityAudit(controlsWithPredicate(), profile, [
       observation({ evidence: [evidence({ profileId: 'another-profile' })] }),
     ]),
     controlId,
   );
   const leakedSummary = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, [
+    runSecurityAudit(controlsWithPredicate(), profile, [
       observation({ evidence: [evidence({ summary: 'token=unredacted' })] }),
     ]),
     controlId,
   );
   const invalidApplicability = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, [
+    runSecurityAudit(controlsWithPredicate(), profile, [
       untypedObservation({ applicability: 'unrecognised' }),
     ]),
     controlId,
@@ -143,7 +173,7 @@ test('invalid evidence metadata and sensitive summaries cannot reach a passing r
 });
 
 test('a profile without a control baseline is incompatible rather than implicitly passing', () => {
-  const controls = createSecurityAuditCatalog().map((control) =>
+  const controls = controlsWithPredicate().map((control) =>
     control.id === controlId ? { ...control, baselines: [] } : control,
   );
   const result = findControl(
@@ -158,7 +188,7 @@ test('a profile without a control baseline is incompatible rather than implicitl
 test('a malformed active profile is incompatible rather than evaluated by a lookalike baseline', () => {
   const malformedProfile = { ...profile, version: '2' };
   const result = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), malformedProfile, [
+    runSecurityAudit(controlsWithPredicate(), malformedProfile, [
       observation({ evidence: [evidence()] }),
     ]),
     controlId,
@@ -169,7 +199,7 @@ test('a malformed active profile is incompatible rather than evaluated by a look
 });
 
 test('an incomplete baseline predicate cannot claim implemented coverage', () => {
-  const controls = createSecurityAuditCatalog().map((control) =>
+  const controls = controlsWithPredicate().map((control) =>
     control.id === controlId
       ? {
           ...control,
@@ -193,11 +223,11 @@ test('malformed observations fail closed without aborting the remaining audit', 
   const item = observation({ evidence: [] });
 
   const duplicate = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, [item, item]),
+    runSecurityAudit(controlsWithPredicate(), profile, [item, item]),
     controlId,
   );
   const unknown = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, [{ ...item, controlId: 'missing' }]),
+    runSecurityAudit(controlsWithPredicate(), profile, [{ ...item, controlId: 'missing' }]),
     controlId,
   );
 
@@ -225,7 +255,7 @@ test('runtime JSON violations are omitted and fail closed without leaking the co
 
   for (const malformed of malformedValues) {
     const result = findControl(
-      runSecurityAudit(createSecurityAuditCatalog(), profile, [untypedObservation(malformed)]),
+      runSecurityAudit(controlsWithPredicate(), profile, [untypedObservation(malformed)]),
       controlId,
     );
     expect(result).toMatchObject({ outcome: 'unknown', coverage: 'supported', evidence: [] });
@@ -236,7 +266,7 @@ test('runtime JSON violations are omitted and fail closed without leaking the co
 
 test('a collector baseline assertion without predicate facts remains unknown', () => {
   const result = findControl(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, [
+    runSecurityAudit(controlsWithPredicate(), profile, [
       observation({ evidence: [untypedEvidence({ baselineStatus: 'satisfied', facts: [] })] }),
     ]),
     controlId,
@@ -268,7 +298,7 @@ function evidence(overrides: Partial<SecurityAuditEvidence> = {}): SecurityAudit
     summary: 'Redacted listener metadata was observed.',
     collectedAt: '2026-11-18T00:00:00.000Z',
     redacted: true,
-    facts: [{ id: 'secure-condition-observed', value: true }],
+    facts: [{ id: 'no-external-tcp-listeners', value: true }],
     ...overrides,
   };
 }
@@ -283,6 +313,28 @@ function untypedObservation(value: object): SecurityAuditObservation {
   return JSON.parse(
     JSON.stringify({ ...observation({ evidence: [evidence()] }), ...value }),
   ) as SecurityAuditObservation;
+}
+
+/** Add a concrete test-only policy so catalog controls remain unsupported without collectors. */
+function controlsWithPredicate() {
+  return createSecurityAuditCatalog().map((control) =>
+    control.id === controlId
+      ? {
+          ...control,
+          baselines: [
+            {
+              profileId: profile.id,
+              expectedSecureCondition: 'No externally reachable TCP listeners were observed.',
+              predicate: {
+                kind: 'all-boolean-facts' as const,
+                facts: [{ id: 'no-external-tcp-listeners', value: true }],
+              },
+              failureSeverity: 'medium' as const,
+            },
+          ],
+        }
+      : control,
+  );
 }
 
 /** Find a catalog result by its stable control identifier. */

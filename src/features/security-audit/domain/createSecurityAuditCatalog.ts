@@ -145,18 +145,7 @@ function control(
     applicability: 'Applicable when macOS provides the required read-only local evidence.',
     detectionMode,
     prerequisites: ['macOS host access', 'read-only local evidence'],
-    baselines: [
-      {
-        profileId: 'macos-informational',
-        expectedSecureCondition:
-          'No insecure exposure is evidenced by a supported read-only collector.',
-        predicate: {
-          kind: 'all-boolean-facts',
-          facts: [{ id: 'secure-condition-observed', value: true }],
-        },
-        failureSeverity: 'medium',
-      },
-    ],
+    baselines: [],
     sourceReferences: ['https://support.apple.com/guide/security/welcome/web'],
     recommendation: { manualRemediation: recommendation },
   };
@@ -178,18 +167,7 @@ function crossLayerControl(
     applicability: 'Applicable when macOS provides the required read-only local evidence.',
     detectionMode,
     prerequisites: ['macOS host access', 'read-only local evidence'],
-    baselines: [
-      {
-        profileId: 'macos-informational',
-        expectedSecureCondition:
-          'No insecure exposure is evidenced by a supported read-only collector.',
-        predicate: {
-          kind: 'all-boolean-facts',
-          facts: [{ id: 'secure-condition-observed', value: true }],
-        },
-        failureSeverity: 'medium',
-      },
-    ],
+    baselines: [],
     sourceReferences: ['https://support.apple.com/guide/security/welcome/web'],
     recommendation: { manualRemediation: recommendation },
   };
