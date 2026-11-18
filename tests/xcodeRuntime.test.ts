@@ -8,7 +8,92 @@ import {
   parseRuntimeInventory,
 } from '../src/features/xcode-runtimes/adapters/outbound/createSimctlRuntimeOperations.js';
 import { cleanStorageAsync } from '../src/features/storage/application/cleanStorageAsync.js';
-import type { SimctlHost } from '../src/types/xcodeRuntime.js';
+import { cleanXcodeRuntimeStorageAsync } from '../src/features/xcode-runtimes/application/cleanXcodeRuntimeStorageAsync.js';
+import type {
+  SimctlHost,
+  XcodeRuntimeDecisions,
+  XcodeRuntimeOperations,
+} from '../src/types/xcodeRuntime.js';
+
+test('collects mixed Xcode decisions and both approvals before either deletion', async () => {
+  const events: string[] = [];
+  const result = await cleanXcodeRuntimeStorageAsync(
+    xcodeOperations(events),
+    xcodeDecisions(events),
+  );
+  expect(result.runtime.outcomes).toEqual([{ id: 'runtime', status: 'cleaned' }]);
+  expect(result.unavailableDevices.status).toBe('cleaned');
+  expect(events).toEqual([
+    'scan',
+    'report-runtime',
+    'report-report-only-runtime',
+    'report-devices',
+    'select-runtime',
+    'select-device',
+    'approve-device',
+    'approve-plan',
+    'available',
+    'revalidate-runtime',
+    'execute-runtime',
+    'available',
+    'available',
+    'revalidate-device',
+    'execute-device',
+    'available',
+  ]);
+});
+
+test('keeps unsupported unavailable devices report-only without a device confirmation', async () => {
+  const events: string[] = [];
+  const operations = xcodeOperations(events, { deviceRisk: 'report-only' });
+  const result = await cleanXcodeRuntimeStorageAsync(operations, xcodeDecisions(events));
+  expect(result.unavailableDevices.status).toBe('skipped');
+  expect(events).not.toContain('select-device');
+  expect(events).toContain('execute-runtime');
+  expect(events).not.toContain('execute-device');
+});
+
+test('does not delete either snapshot when the complete plan is refused', async () => {
+  const events: string[] = [];
+  const result = await cleanXcodeRuntimeStorageAsync(
+    xcodeOperations(events),
+    xcodeDecisions(events, { approvePlan: false }),
+  );
+  expect(result.runtime.outcomes).toEqual([]);
+  expect(result.unavailableDevices.status).toBe('skipped');
+  expect(events).toEqual([
+    'scan',
+    'report-runtime',
+    'report-report-only-runtime',
+    'report-devices',
+    'select-runtime',
+    'select-device',
+    'approve-device',
+    'approve-plan',
+  ]);
+});
+
+test('does not delete an unavailable-device snapshot when strong device approval is aborted', async () => {
+  const events: string[] = [];
+  const result = await cleanXcodeRuntimeStorageAsync(
+    xcodeOperations(events),
+    xcodeDecisions(events, { approveDevice: false }),
+  );
+  expect(result.unavailableDevices.status).toBe('skipped');
+  expect(events).not.toContain('execute-device');
+  expect(events).toContain('execute-runtime');
+});
+
+test('reports a changed runtime snapshot without deleting either unapproved mutation target', async () => {
+  const events: string[] = [];
+  const result = await cleanXcodeRuntimeStorageAsync(
+    xcodeOperations(events, { runtimeRevalidated: false }),
+    xcodeDecisions(events),
+  );
+  expect(result.runtime.outcomes).toEqual([{ id: 'runtime', status: 'changed' }]);
+  expect(events).not.toContain('execute-runtime');
+  expect(events).toContain('execute-device');
+});
 
 test('discovers every runtime family and marks only the numeric newest installed runtime', () => {
   const runtimes = JSON.stringify({
@@ -249,5 +334,90 @@ function runtime(identifier: string, version: string, buildversion: string, bund
     buildversion,
     isAvailable: true,
     ...(bundlePath ? { bundlePath } : {}),
+  };
+}
+
+/** Create a mixed Xcode inventory and record every interaction with its destructive boundary. */
+function xcodeOperations(
+  events: string[],
+  options: {
+    readonly deviceRisk?: 'safe' | 'report-only';
+    readonly runtimeRevalidated?: boolean;
+  } = {},
+): XcodeRuntimeOperations {
+  const runtimeCandidate = {
+    id: 'runtime',
+    label: 'Older iOS runtime',
+    estimatedBytes: 10,
+    risk: 'safe' as const,
+    reason: 'safe',
+    fingerprint: 'runtime-fingerprint',
+    kind: 'xcode-runtime' as const,
+  };
+  const reportOnlyRuntime = {
+    ...runtimeCandidate,
+    id: 'report-only-runtime',
+    risk: 'report-only' as const,
+  };
+  const deviceCandidate = {
+    id: 'devices',
+    label: 'Unavailable Simulator devices',
+    estimatedBytes: null,
+    risk: options.deviceRisk ?? 'safe',
+    reason: 'device cleanup',
+    fingerprint: 'device-fingerprint',
+    kind: 'unavailable-simulator-devices' as const,
+  };
+  return {
+    async scan() {
+      events.push('scan');
+      return [runtimeCandidate, reportOnlyRuntime, deviceCandidate];
+    },
+    async revalidate(candidate) {
+      events.push('revalidate-runtime');
+      return candidate.id === runtimeCandidate.id && options.runtimeRevalidated !== false;
+    },
+    async execute() {
+      events.push('execute-runtime');
+    },
+    async revalidateUnavailableDevices() {
+      events.push('revalidate-device');
+      return true;
+    },
+    async executeUnavailableDevices() {
+      events.push('execute-device');
+    },
+    async availableBytes() {
+      events.push('available');
+      return 100;
+    },
+  };
+}
+
+/** Create deterministic user decisions while preserving the exact approval order in the event log. */
+function xcodeDecisions(
+  events: string[],
+  options: { readonly approveDevice?: boolean; readonly approvePlan?: boolean } = {},
+): XcodeRuntimeDecisions {
+  return {
+    reportCandidate(candidate) {
+      events.push(`report-${candidate.id}`);
+    },
+    async selectRuntime() {
+      events.push('select-runtime');
+      return true;
+    },
+    async selectUnavailableDevices() {
+      events.push('select-device');
+      return true;
+    },
+    async approveUnavailableDevices() {
+      events.push('approve-device');
+      return options.approveDevice ?? true;
+    },
+    async approvePlan() {
+      events.push('approve-plan');
+      return options.approvePlan ?? true;
+    },
   };
 }
