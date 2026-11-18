@@ -16,10 +16,6 @@ export {
 } from './features/security-audit/domain/createMacosHostSecuritySupportMatrix.js';
 export { createSecurityAuditCatalog } from './features/security-audit/domain/createSecurityAuditCatalog.js';
 export { createSecurityAuditProfile } from './features/security-audit/domain/createSecurityAuditProfile.js';
-export { collectApplicationPostureObservationAsync } from './features/security-posture/application/collectApplicationPostureObservationAsync.js';
-export { collectPresentationTrustObservationAsync } from './features/security-posture/application/collectPresentationTrustObservationAsync.js';
-export { collectSessionExposureObservationAsync } from './features/security-posture/application/collectSessionExposureObservationAsync.js';
-export { collectMacosSecurityPostureObservationsAsync } from './features/security-posture/composition/collectMacosSecurityPostureObservationsAsync.js';
 export { collectSecurityNetworkAsync } from './features/security-network/application/collectSecurityNetworkAsync.js';
 export { collectDefaultSecurityNetworkAsync } from './features/security-network/composition/collectDefaultSecurityNetworkAsync.js';
 export type {
@@ -27,6 +23,10 @@ export type {
   SecurityNetworkCommandStatus,
   SecurityNetworkHost,
 } from './features/security-network/ports/securityNetworkHost.js';
+export { collectApplicationPostureObservationAsync } from './features/security-posture/application/collectApplicationPostureObservationAsync.js';
+export { collectPresentationTrustObservationAsync } from './features/security-posture/application/collectPresentationTrustObservationAsync.js';
+export { collectSessionExposureObservationAsync } from './features/security-posture/application/collectSessionExposureObservationAsync.js';
+export { collectMacosSecurityPostureObservationsAsync } from './features/security-posture/composition/collectMacosSecurityPostureObservationsAsync.js';
 export { cleanStorageAsync } from './features/storage/application/cleanStorageAsync.js';
 export { scanOrphanedApplicationsAsync } from './features/storage/application/scanOrphanedApplicationsAsync.js';
 export { scanStorageAsync } from './features/storage/composition/scanStorageAsync.js';
