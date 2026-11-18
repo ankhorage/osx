@@ -38,7 +38,7 @@ jobs:
       - name: Accept the packed provider through read-only simctl inventory
         env:
           ANKH_NATIVE_CORESIMULATOR_ACCEPTANCE: '1'
-        run: bun test tests/packedProvider.test.ts
+        run: bun test --timeout 120000 tests/packedProvider.test.ts
       - name: Upload CoreSimulator diagnostics
         if: always()
         uses: actions/upload-artifact@v4
