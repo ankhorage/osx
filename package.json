@@ -12,6 +12,7 @@
     "access": "public"
   },
   "devDependencies": {
+    "@ankhorage/ankh": "^0.13.7",
     "@ankhorage/devtools": "^2.8.3",
     "@ankhorage/doctor": "^0.14.36",
     "@ankhorage/paradox": "^0.5.0",
@@ -53,7 +54,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.js"
+    }
   },
   "files": [
     "dist",
@@ -61,5 +66,42 @@
     "CHANGELOG.md",
     "LICENSE"
   ],
-  "sideEffects": false
+  "sideEffects": false,
+  "dependencies": {
+    "@ankhorage/contracts": "^26.11.1"
+  },
+  "ankh": {
+    "category": "osx",
+    "provider": "./dist/cli/index.js",
+    "capabilities": [
+      {
+        "id": "osx.storage.clean",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "Clean storage"
+      },
+      {
+        "id": "osx.storage.scan",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "Inspect storage"
+      }
+    ]
+  }
 }

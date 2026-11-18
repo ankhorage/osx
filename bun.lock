@@ -4,7 +4,11 @@
   "workspaces": {
     "": {
       "name": "@ankhorage/osx",
+      "dependencies": {
+        "@ankhorage/contracts": "^26.11.1",
+      },
       "devDependencies": {
+        "@ankhorage/ankh": "^0.13.7",
         "@ankhorage/devtools": "^2.8.3",
         "@ankhorage/doctor": "^0.14.36",
         "@ankhorage/paradox": "^0.5.0",
