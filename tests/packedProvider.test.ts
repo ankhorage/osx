@@ -79,6 +79,7 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(help.exitCode).toBe(0);
     expect(output.join('')).toContain('storage scan');
     expect(output.join('')).toContain('storage clean');
+    expect(output.join('')).toContain('storage xcode scan');
     expect(output.join('')).toContain('security audit');
     expect(output.join('')).toContain('security controls list');
     expect(output.join('')).toContain('storage orphans scan');
@@ -108,7 +109,6 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     const controls = await runCli(['osx', 'security', 'controls', 'list', '--json'], options);
     expect(controls.exitCode).toBe(0);
     expect(JSON.parse(output.join('')).controls).toHaveLength(17);
-    expect(output.join('')).toContain('storage xcode scan');
     output.length = 0;
     const scan = await runCli(['osx', 'storage', 'scan', '--json'], options);
     const xcodeClean = await runCli(['osx', 'storage', 'xcode', 'clean', '--dry-run'], options);

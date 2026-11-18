@@ -121,6 +121,31 @@ test('discovers every runtime family and marks only the numeric newest installed
   ]);
 });
 
+test('reports a CoreSimulator connection failure without offering a destructive operation', async () => {
+  const calls: string[] = [];
+  const operations = createSimctlRuntimeOperations({
+    async run(command, args) {
+      calls.push(`${command} ${args.join(' ')}`);
+      if (command === 'xcode-select')
+        return { stdout: '/Applications/Xcode.app/Contents/Developer\n', stderr: '' };
+      throw new Error('CoreSimulatorService connection became invalid.');
+    },
+    async freeBytes() {
+      return null;
+    },
+  });
+
+  await expect(operations.scan()).resolves.toEqual([
+    expect.objectContaining({
+      id: 'xcode-runtimes',
+      risk: 'report-only',
+      reason: 'CoreSimulatorService connection became invalid.',
+    }),
+  ]);
+  expect(calls).toEqual(['xcode-select -p', 'xcrun simctl help runtime']);
+  expect(calls.some((call) => call.includes(' delete '))).toBeFalse();
+});
+
 test('collects decisions before deletion and revalidates the runtime snapshot', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'osx-xcode-runtime-')));
   try {
