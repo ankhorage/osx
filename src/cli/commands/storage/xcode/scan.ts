@@ -1,6 +1,6 @@
 import type { AnkhCommandExecutionRequest } from '@ankhorage/ankh';
 
-import { createXcodeRuntimeOperations } from '../../../../features/xcode-runtimes/composition/createXcodeRuntimeOperations.js';
+import { scanXcodeRuntimesAsync } from '../../../../features/xcode-runtimes/composition/scanXcodeRuntimesAsync.js';
 
 /*** Render the Xcode Simulator runtime inventory without mutating the host. */
 export async function scan(request: AnkhCommandExecutionRequest): Promise<{ exitCode: number }> {
@@ -12,13 +12,13 @@ export async function scan(request: AnkhCommandExecutionRequest): Promise<{ exit
     request.context.writeStderr('Xcode Simulator inspection is available only on macOS.\n');
     return { exitCode: 1 };
   }
-  const candidates = await createXcodeRuntimeOperations().scan();
+  const runtimes = await scanXcodeRuntimesAsync();
   if (request.argv.includes('--json')) {
-    request.context.writeStdout(`${JSON.stringify({ candidates }, null, 2)}\n`);
+    request.context.writeStdout(`${JSON.stringify({ runtimes }, null, 2)}\n`);
   } else {
-    for (const candidate of candidates)
+    for (const runtime of runtimes)
       request.context.writeStdout(
-        `${candidate.label}: ${candidate.estimatedBytes ?? 'unknown'} allocated bytes; [${candidate.risk}] ${candidate.reason}\n${candidate.preview ? `${candidate.preview}\n` : ''}`,
+        `${runtime.family} ${runtime.name}: ${runtime.allocatedBytes ?? 'unknown'} allocated bytes; ${runtime.newestInstalled ? 'NEWEST INSTALLED' : 'older installed'}; active devices ${runtime.activeDeviceCount}; unavailable devices ${runtime.unavailableDeviceCount}\n`,
       );
   }
   return { exitCode: 0 };

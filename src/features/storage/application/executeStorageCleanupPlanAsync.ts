@@ -28,10 +28,12 @@ export async function executeStorageCleanupPlanAsync(
     try {
       if (!(await operations.revalidate(candidate)))
         outcomes.push({ id: candidate.id, status: 'changed' });
-      else {
-        const execution = await operations.execute(candidate);
-        outcomes.push({ id: candidate.id, status: 'cleaned', ...execution });
-      }
+      else
+        outcomes.push({
+          id: candidate.id,
+          status: 'cleaned',
+          ...(await operations.execute(candidate)),
+        });
     } catch (error) {
       outcomes.push({
         id: candidate.id,
