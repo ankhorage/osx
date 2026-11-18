@@ -1,0 +1,47 @@
+name: macOS CoreSimulator read-only acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/packedProvider.test.ts'
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/macos-coresimulator-readonly.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-read-only-acceptance:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Diagnose CoreSimulator without mutation
+        run: |
+          set -o pipefail
+          mkdir -p coresimulator-diagnostics
+          sw_vers > coresimulator-diagnostics/macos.txt
+          xcode-select -p > coresimulator-diagnostics/xcode-select.txt 2>&1 || true
+          xcrun simctl list runtimes -j > coresimulator-diagnostics/runtimes.txt 2>&1 || true
+          xcrun simctl list devices -j > coresimulator-diagnostics/devices.txt 2>&1 || true
+          runner_uid="$(id -u)"
+          launchctl print "gui/${runner_uid}/com.apple.CoreSimulator.CoreSimulatorService" > coresimulator-diagnostics/core-simulator-user-service.txt 2>&1 || true
+          launchctl print system/com.apple.CoreSimulator.CoreSimulatorService > coresimulator-diagnostics/core-simulator-system-service.txt 2>&1 || true
+          pgrep -alf '[s]imdiskimaged' > coresimulator-diagnostics/simdiskimaged.txt || true
+      - name: Accept the packed provider through read-only simctl inventory
+        env:
+          ANKH_NATIVE_CORESIMULATOR_ACCEPTANCE: '1'
+        run: bun test --timeout 120000 tests/packedProvider.test.ts
+      - name: Upload CoreSimulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coresimulator-read-only-diagnostics
+          path: coresimulator-diagnostics

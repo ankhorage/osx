@@ -19,6 +19,11 @@ export { createSecurityAuditProfile } from './features/security-audit/domain/cre
 export { cleanStorageAsync } from './features/storage/application/cleanStorageAsync.js';
 export { scanOrphanedApplicationsAsync } from './features/storage/application/scanOrphanedApplicationsAsync.js';
 export { scanStorageAsync } from './features/storage/composition/scanStorageAsync.js';
+export {
+  createSimctlRuntimeScanner,
+  parseRuntimeInventoryAsync,
+} from './features/xcode-runtimes/adapters/outbound/createSimctlRuntimeScanner.js';
+export { scanXcodeRuntimesAsync } from './features/xcode-runtimes/composition/scanXcodeRuntimesAsync.js';
 export type {
   OrphanedApplicationEvidenceAvailability,
   OrphanedApplicationEvidenceSource,
@@ -54,3 +59,4 @@ export type {
   StorageExecution,
   StorageOperations,
 } from './types/storage.js';
+export type { SimctlHost, XcodeRuntime } from './types/xcodeRuntime.js';

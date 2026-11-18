@@ -7,6 +7,7 @@ import { list } from './commands/security/controls/list.js';
 import { clean } from './commands/storage/clean.js';
 import { scan as scanOrphans } from './commands/storage/orphans/scan.js';
 import { scan } from './commands/storage/scan.js';
+import { scan as scanXcode } from './commands/storage/xcode/scan.js';
 
 const capabilities = [
   {
@@ -73,6 +74,11 @@ const provider = {
       capability: 'osx.security.controls.list',
       summary: 'List the security-audit control catalog.',
     },
+    {
+      path: ['storage', 'xcode', 'scan'],
+      capability: 'osx.storage.scan',
+      summary: 'Inspect Xcode Simulator runtimes.',
+    },
   ],
   handlers: [
     { path: ['storage', 'scan'], handler: scan },
@@ -80,6 +86,7 @@ const provider = {
     { path: ['storage', 'orphans', 'scan'], handler: scanOrphans },
     { path: ['security', 'audit'], handler: audit },
     { path: ['security', 'controls', 'list'], handler: list },
+    { path: ['storage', 'xcode', 'scan'], handler: scanXcode },
   ],
 } satisfies AnkhRuntimeCommandProvider;
 
