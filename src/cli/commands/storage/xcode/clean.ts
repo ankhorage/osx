@@ -1,7 +1,7 @@
 import type { AnkhCommandExecutionRequest, AnkhCommandInteraction } from '@ankhorage/ankh';
 
 import { cleanStorageAsync } from '../../../../features/storage/application/cleanStorageAsync.js';
-import { createSimctlRuntimeOperations } from '../../../../features/xcode-runtimes/adapters/outbound/createSimctlRuntimeOperations.js';
+import { createXcodeRuntimeOperations } from '../../../../features/xcode-runtimes/composition/createXcodeRuntimeOperations.js';
 import type { StorageCandidate, StorageDecisions } from '../../../../types/storage.js';
 
 /*** Collect all Xcode runtime decisions before one final approval and fail-closed execution. */
@@ -18,7 +18,7 @@ export async function clean(request: AnkhCommandExecutionRequest): Promise<{ exi
     request.context.writeStderr('Interactive confirmation is required.\n');
     return { exitCode: 1 };
   }
-  const operations = createSimctlRuntimeOperations();
+  const operations = createXcodeRuntimeOperations();
   const scanned = await operations.scan();
   for (const candidate of scanned)
     request.context.writeStdout(

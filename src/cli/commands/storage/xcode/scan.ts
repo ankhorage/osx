@@ -1,6 +1,6 @@
 import type { AnkhCommandExecutionRequest } from '@ankhorage/ankh';
 
-import { createSimctlRuntimeOperations } from '../../../../features/xcode-runtimes/adapters/outbound/createSimctlRuntimeOperations.js';
+import { createXcodeRuntimeOperations } from '../../../../features/xcode-runtimes/composition/createXcodeRuntimeOperations.js';
 
 /*** Render the Xcode Simulator runtime inventory without mutating the host. */
 export async function scan(request: AnkhCommandExecutionRequest): Promise<{ exitCode: number }> {
@@ -12,7 +12,7 @@ export async function scan(request: AnkhCommandExecutionRequest): Promise<{ exit
     request.context.writeStderr('Xcode Simulator inspection is available only on macOS.\n');
     return { exitCode: 1 };
   }
-  const candidates = await createSimctlRuntimeOperations().scan();
+  const candidates = await createXcodeRuntimeOperations().scan();
   if (request.argv.includes('--json')) {
     request.context.writeStdout(`${JSON.stringify({ candidates }, null, 2)}\n`);
   } else {
