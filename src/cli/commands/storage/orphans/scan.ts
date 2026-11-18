@@ -26,7 +26,7 @@ export async function scan(request: AnkhCommandExecutionRequest): Promise<{ exit
     } else {
       for (const application of applications) {
         request.context.writeStdout(
-          `${application.label} (${application.path}): ${application.allocatedBytes} allocated bytes [${application.confidence}; report-only] ${[...application.evidence, ...application.blockers].join('; ')}\n`,
+          `${application.label} (${application.path}): ${application.allocatedBytes} allocated bytes [${application.confidence}; report-only] ${[...application.evidence, ...application.blockers].join('; ')}; evidence: ${application.evidenceAvailability.map((source) => `${source.source}=${source.available ? 'available' : 'unavailable'}`).join(', ')}\n`,
         );
       }
     }

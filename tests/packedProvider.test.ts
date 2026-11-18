@@ -63,6 +63,10 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(output.join('')).toContain('storage clean');
     expect(output.join('')).toContain('storage orphans scan');
     output.length = 0;
+    const orphanClean = await runCli(['osx', 'storage', 'orphans', 'clean'], options);
+    expect(orphanClean.exitCode).toBe(1);
+    expect(errors.join('')).toContain('safe reversible Trash adapter');
+    errors.length = 0;
     const scan = await runCli(['osx', 'storage', 'scan', '--json'], options);
     if (process.platform === 'darwin') {
       expect(scan.exitCode).toBe(0);

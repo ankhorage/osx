@@ -2,6 +2,7 @@ import { lstat, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type {
+  OrphanedApplicationEvidenceSource,
   OrphanedApplicationHost,
   OrphanedApplicationObservation,
 } from '../../../types/orphanedApplications.js';
@@ -11,7 +12,7 @@ export async function scanOrphanedApplicationsAsync(
   home: string,
   host: OrphanedApplicationHost,
 ): Promise<readonly OrphanedApplicationObservation[]> {
-  const [installedBundleIds, receiptBundleIds, activeProcessNames, cliNames] = await Promise.all([
+  const [installedSources, receiptSources, processSources, cliSources] = await Promise.all([
     host.installedBundleIds(),
     host.receiptBundleIds(),
     host.activeProcessNames(),
@@ -19,10 +20,18 @@ export async function scanOrphanedApplicationsAsync(
   ]);
   const inventory = {
     host,
-    installed: new Set(installedBundleIds),
-    receipts: new Set(receiptBundleIds),
-    active: new Set(activeProcessNames),
-    cli: new Set(cliNames),
+    installed: valuesFor(installedSources),
+    receipts: valuesFor(receiptSources),
+    active: valuesFor(processSources),
+    cli: valuesFor(cliSources),
+    unavailableSources: [
+      ...installedSources,
+      ...receiptSources,
+      ...processSources,
+      ...cliSources,
+    ].filter((source) => !source.available),
+    evidenceSources: [...installedSources, ...receiptSources, ...processSources, ...cliSources],
+    installedInventoryComplete: installedSources.every((source) => source.available),
   };
   const roots = ownershipRoots(home);
   const entries = await Promise.all(
@@ -37,6 +46,9 @@ interface Inventory {
   readonly receipts: ReadonlySet<string>;
   readonly active: ReadonlySet<string>;
   readonly cli: ReadonlySet<string>;
+  readonly unavailableSources: readonly OrphanedApplicationEvidenceSource[];
+  readonly evidenceSources: readonly OrphanedApplicationEvidenceSource[];
+  readonly installedInventoryComplete: boolean;
 }
 interface OwnershipRoot {
   readonly path: string;
@@ -101,26 +113,49 @@ async function observationAsync(
     if (!bundleId) return null;
     const inspection = await inventory.host.inspectPath(path);
     if (inspection.allocatedBytes === null) return null;
-    const blockers = protectionBlockers(bundleId, name, kind, inventory);
-    const missing = bundleId && !inventory.installed.has(bundleId);
-    if (!missing && blockers.length === 0) return null;
-    return {
-      bundleId,
-      label: bundleId ? `Possible remnant for ${bundleId}` : `Possible app remnant: ${name}`,
-      path,
-      allocatedBytes: inspection.allocatedBytes,
-      confidence: bundleId ? 'medium' : 'low',
-      evidence: [
-        `${inspection.allocatedBytes} allocated bytes`,
-        bundleId ? `bundle identifier: ${bundleId}` : `app manifest name: ${name}`,
-        missing ? 'matching installed bundle was not found' : 'matching installed bundle was found',
-      ],
-      blockers:
-        blockers.length > 0 ? blockers : ['uninstalled state is not sufficient proof; report-only'],
-    };
+    return observationFor(path, name, kind, bundleId, inspection.allocatedBytes, inventory);
   } catch {
     return null;
   }
+}
+
+/*** Assemble one report-only observation after filesystem ownership has been verified. */
+function observationFor(
+  path: string,
+  name: string,
+  kind: OwnershipRoot['kind'],
+  bundleId: string,
+  allocatedBytes: number,
+  inventory: Inventory,
+): OrphanedApplicationObservation | null {
+  const blockers = protectionBlockers(bundleId, name, kind, inventory);
+  const missing = inventory.installedInventoryComplete && !inventory.installed.has(bundleId);
+  if (!missing && blockers.length === 0) return null;
+  return {
+    bundleId,
+    label: `Possible remnant for ${bundleId}`,
+    path,
+    allocatedBytes,
+    confidence: 'medium',
+    evidence: [
+      `${allocatedBytes} allocated bytes`,
+      `bundle identifier: ${bundleId}`,
+      installationEvidence(missing, inventory.installedInventoryComplete),
+    ],
+    evidenceAvailability: inventory.evidenceSources.map(({ source, available }) => ({
+      source,
+      available,
+    })),
+    blockers:
+      blockers.length > 0 ? blockers : ['uninstalled state is not sufficient proof; report-only'],
+  };
+}
+
+/*** Describe absence only after every installed-application source completed successfully. */
+function installationEvidence(missing: boolean, installedInventoryComplete: boolean): string {
+  if (missing) return 'matching installed bundle was not found in complete inventory';
+  if (installedInventoryComplete) return 'matching installed bundle was found';
+  return 'installed application inventory is incomplete';
 }
 
 /** Accept exact bundle-id roots and manifest-backed hidden configuration, never arbitrary dotdirectories. */
@@ -151,7 +186,13 @@ function protectionBlockers(
     ...(processName && inventory.cli.has(processName)
       ? ['matching CLI-only installation exists']
       : []),
+    ...inventory.unavailableSources.map((source) => `${source.source} evidence is unavailable`),
   ];
+}
+
+/*** Gather all normalized values from the independently available evidence sources. */
+function valuesFor(sources: readonly OrphanedApplicationEvidenceSource[]): ReadonlySet<string> {
+  return new Set(sources.flatMap((source) => source.values));
 }
 
 /** Read an app-owned JSON marker, which is required before hidden configuration may be reported. */

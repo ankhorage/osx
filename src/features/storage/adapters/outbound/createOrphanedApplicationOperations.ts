@@ -27,7 +27,7 @@ export function createOrphanedApplicationOperations(
 /** Preserve all ambiguity and protection evidence at the common storage boundary. */
 function asStorageCandidate(observation: OrphanedApplicationObservation): StorageCandidate {
   return {
-    id: `orphaned-application:${observation.bundleId ?? observation.path}`,
+    id: `orphaned-application:${observation.path}`,
     label: observation.label,
     path: observation.path,
     estimatedBytes: observation.allocatedBytes,

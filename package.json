@@ -114,7 +114,7 @@
             "target"
           ]
         },
-        "label": "Clean orphaned application remnants"
+        "label": "Orphan cleanup unavailable (read-only discovery)"
       },
       {
         "id": "osx.storage.orphans.scan",

@@ -27,7 +27,7 @@ const capabilities = [
     owner: '@ankhorage/osx',
     access: ['invoke'],
     binding: { kind: 'action', bindableAs: ['target'] },
-    label: 'Clean orphaned application remnants',
+    label: 'Orphan cleanup unavailable (read-only discovery)',
   },
   {
     id: 'osx.storage.orphans.scan',
@@ -58,7 +58,7 @@ const provider = {
     {
       path: ['storage', 'orphans', 'clean'],
       capability: 'osx.storage.orphans.clean',
-      summary: 'Clean selected orphaned application remnants after confirmation.',
+      summary: 'Explain that orphan cleanup is unavailable until reversible Trash support exists.',
     },
   ],
   handlers: [
