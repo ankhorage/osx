@@ -8,6 +8,7 @@ export interface StorageCandidate {
   readonly reason: string;
   readonly fingerprint: string;
   readonly preview?: string;
+  readonly kind?: 'xcode-runtime' | 'unavailable-simulator-devices';
 }
 
 /** The storage boundary deliberately leaves platform-specific inspection to an adapter. */

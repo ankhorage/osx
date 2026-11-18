@@ -53,6 +53,11 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       'security',
       'audit',
     ]);
+    expect(loaded.providers[0]?.manifest.commands.map((command) => command.path)).toContainEqual([
+      'storage',
+      'xcode',
+      'scan',
+    ]);
     const output: string[] = [];
     const errors: string[] = [];
     const context = {
@@ -103,6 +108,7 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     const controls = await runCli(['osx', 'security', 'controls', 'list', '--json'], options);
     expect(controls.exitCode).toBe(0);
     expect(JSON.parse(output.join('')).controls).toHaveLength(17);
+    expect(output.join('')).toContain('storage xcode scan');
     output.length = 0;
     const scan = await runCli(['osx', 'storage', 'scan', '--json'], options);
     if (process.platform === 'darwin') {
@@ -110,6 +116,10 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       expect(JSON.parse(output.join('')).candidates).toBeArray();
     } else {
       expect(scan.exitCode).toBe(1);
+      expect(errors.join('')).toContain('only on macOS');
+      errors.length = 0;
+      const xcodeScan = await runCli(['osx', 'storage', 'xcode', 'scan', '--json'], options);
+      expect(xcodeScan.exitCode).toBe(1);
       expect(errors.join('')).toContain('only on macOS');
       errors.length = 0;
       const clean = await runCli(['osx', 'storage', 'clean', '--dry-run'], options);
