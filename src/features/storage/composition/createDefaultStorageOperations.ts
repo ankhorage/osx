@@ -2,6 +2,7 @@ import type { StorageCandidate, StorageOperations } from '../../../types/storage
 import { createBunCacheHost } from '../adapters/outbound/createBunCacheHost.js';
 import { createBunCacheOperations } from '../adapters/outbound/createBunCacheOperations.js';
 import { createToolCleanupOperations } from '../adapters/outbound/createToolCleanupOperations.js';
+import { createOrphanedApplicationStorageOperations } from './createOrphanedApplicationStorageOperations.js';
 import { createToolCleanupDefinitions } from './createToolCleanupDefinitions.js';
 import { scanStorageAsync } from './scanStorageAsync.js';
 
@@ -15,7 +16,8 @@ export function createDefaultStorageOperations(
     createToolCleanupOperations(command, definition),
   );
   const bun = createBunCacheOperations(createBunCacheHost(home, cwd, env));
-  const sources = [bun, ...toolOperations];
+  const orphans = createOrphanedApplicationStorageOperations(home);
+  const sources = [bun, ...toolOperations, orphans];
   return {
     async scan() {
       const reported = await scanStorageAsync(home, sources);
