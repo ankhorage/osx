@@ -3,21 +3,13 @@ import type {
   SecurityAuditObservation,
   SecurityAuditProfile,
 } from '../../../../types/securityAudit.js';
-
-type CommandResult =
-  | { readonly kind: 'available'; readonly stdout: string }
-  | { readonly kind: 'missing' }
-  | { readonly kind: 'permission-denied' }
-  | { readonly kind: 'timed-out' }
-  | { readonly kind: 'failed' };
+import type {
+  MacosSecurityAuditCommandResult as CommandResult,
+  MacosSecurityAuditCommandRunner,
+} from './createMacosSecurityAuditCommandRunner.js';
 
 const maximumInterfaceStatusProbes = 4;
 const interfaceStatusProbeTimeoutMilliseconds = 1_000;
-
-export interface MacosSecurityAuditCommandRunner {
-  readonly platform: string;
-  run(command: string, arguments_: readonly string[], timeoutMilliseconds?: number): CommandResult;
-}
 
 interface CollectorInput {
   readonly runner: MacosSecurityAuditCommandRunner;

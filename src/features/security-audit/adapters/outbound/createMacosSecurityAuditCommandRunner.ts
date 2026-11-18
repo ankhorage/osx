@@ -1,6 +1,20 @@
 import { execFileSync } from 'node:child_process';
 
-import type { MacosSecurityAuditCommandRunner } from './collectMacosPhysicalAndLinkObservations.js';
+export type MacosSecurityAuditCommandResult =
+  | { readonly kind: 'available'; readonly stdout: string }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'permission-denied' }
+  | { readonly kind: 'timed-out' }
+  | { readonly kind: 'failed' };
+
+export interface MacosSecurityAuditCommandRunner {
+  readonly platform: string;
+  run(
+    command: string,
+    arguments_: readonly string[],
+    timeoutMilliseconds?: number,
+  ): MacosSecurityAuditCommandResult;
+}
 
 /*** Create the bounded local command boundary for passive macOS security collectors. */
 export function createMacosSecurityAuditCommandRunner(): MacosSecurityAuditCommandRunner {
@@ -28,7 +42,7 @@ export function createMacosSecurityAuditCommandRunner(): MacosSecurityAuditComma
 /*** Map local process failures to explicit source states without retaining process output. */
 function commandFailure(
   error: unknown,
-): Exclude<ReturnType<MacosSecurityAuditCommandRunner['run']>, { readonly kind: 'available' }> {
+): Exclude<MacosSecurityAuditCommandResult, { readonly kind: 'available' }> {
   if (!isRecord(error)) return { kind: 'failed' };
   if (error.code === 'ENOENT') return { kind: 'missing' };
   if (error.code === 'EACCES' || error.code === 'EPERM') return { kind: 'permission-denied' };
