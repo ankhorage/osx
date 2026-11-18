@@ -112,7 +112,10 @@ test('missing, blocked, contradictory, and unknown applicability evidence fail c
       observation({
         evidence: [
           evidence({ id: 'secure', facts: [{ id: 'no-non-loopback-tcp-listeners', value: true }] }),
-          evidence({ id: 'insecure', facts: [{ id: 'no-non-loopback-tcp-listeners', value: false }] }),
+          evidence({
+            id: 'insecure',
+            facts: [{ id: 'no-non-loopback-tcp-listeners', value: false }],
+          }),
         ],
       }),
     ]),
