@@ -32,6 +32,28 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(packageApi.collectMacosHostSecurityObservations).toBeFunction();
     expect(packageApi.collectMacosPhysicalAndLinkObservations).toBeFunction();
     expect(packageApi.createMacosSecurityAuditCommandRunner).toBeFunction();
+    expect(packageApi.parseRuntimeInventoryAsync).toBeFunction();
+    await expect(
+      packageApi.parseRuntimeInventoryAsync(
+        JSON.stringify({
+          runtimes: [
+            {
+              identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-18-0',
+              name: 'iOS 18.0',
+              version: '18.0',
+              buildversion: 'A',
+            },
+          ],
+        }),
+        JSON.stringify({ devices: {} }),
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        family: 'iOS/iPadOS',
+        identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-18-0',
+        newestInstalled: true,
+      }),
+    ]);
     const discovered = await discoverAnkhPackages({ cwd: join(extracted, 'package') });
     expect(discovered.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([]);
     const ours = discovered.packages.filter((entry) => entry.packageName === '@ankhorage/osx');
@@ -60,6 +82,17 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       'security',
       'audit',
     ]);
+    expect(loaded.providers[0]?.manifest.commands.map((command) => command.path)).toContainEqual([
+      'storage',
+      'xcode',
+      'scan',
+    ]);
+    expect(
+      loaded.providers[0]?.manifest.commands.map((command) => command.path),
+    ).not.toContainEqual(['storage', 'xcode', 'clean']);
+    expect(
+      loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id),
+    ).not.toContain('osx.storage.xcode.clean');
     const output: string[] = [];
     const errors: string[] = [];
     const context = {
@@ -85,6 +118,8 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(help.exitCode).toBe(0);
     expect(output.join('')).toContain('storage scan');
     expect(output.join('')).toContain('storage clean');
+    expect(output.join('')).toContain('storage xcode scan');
+    expect(output.join('')).not.toContain('storage xcode clean');
     expect(output.join('')).toContain('security audit');
     expect(output.join('')).toContain('security controls list');
     expect(output.join('')).toContain('storage orphans scan');
@@ -155,8 +190,22 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     if (process.platform === 'darwin') {
       expect(scan.exitCode).toBe(0);
       expect(JSON.parse(output.join('')).candidates).toBeArray();
+      output.length = 0;
+      if (process.env.ANKH_NATIVE_CORESIMULATOR_ACCEPTANCE === '1') {
+        output.length = 0;
+        const xcodeScan = await runCli(['osx', 'storage', 'xcode', 'scan', '--json'], options);
+        expect(xcodeScan.exitCode).toBe(0);
+        const inventory = JSON.parse(output.join('')) as {
+          readonly runtimes: readonly { readonly identifier: string }[];
+        };
+        expect(inventory.runtimes).toBeArray();
+      }
     } else {
       expect(scan.exitCode).toBe(1);
+      expect(errors.join('')).toContain('only on macOS');
+      errors.length = 0;
+      const xcodeScan = await runCli(['osx', 'storage', 'xcode', 'scan', '--json'], options);
+      expect(xcodeScan.exitCode).toBe(1);
       expect(errors.join('')).toContain('only on macOS');
       errors.length = 0;
       const clean = await runCli(['osx', 'storage', 'clean', '--dry-run'], options);
@@ -166,4 +215,4 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
-}, 30_000);
+}, 120_000);
