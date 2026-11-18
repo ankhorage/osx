@@ -7,6 +7,7 @@ export interface StorageCandidate {
   readonly risk: 'safe' | 'report-only';
   readonly reason: string;
   readonly fingerprint: string;
+  readonly preview?: string;
 }
 
 /** The storage boundary deliberately leaves platform-specific inspection to an adapter. */

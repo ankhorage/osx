@@ -14,6 +14,8 @@ export interface ToolCleanupDefinition {
   readonly cleanupArgs: readonly string[];
   readonly pathFromOutput?: (output: string) => string | null;
   readonly estimateFromOutput?: (output: string) => number | null;
+  readonly previewFromOutput?: (output: string) => string | null;
+  readonly reportOnlyReason?: string;
   readonly reason: string;
 }
 
@@ -80,37 +82,50 @@ async function inspectToolAsync(
 ): Promise<StorageCandidate> {
   try {
     const result = await host.run(command, definition.inspectArgs);
-    const path = definition.pathFromOutput?.(result.stdout) ?? null;
-    if (!path && !definition.estimateFromOutput)
-      return reportOnly(definition, 'Tool did not provide a canonical cache path.');
-    if (!path) {
-      const estimate = definition.estimateFromOutput?.(result.stdout) ?? null;
-      if (estimate === null)
-        return reportOnly(definition, 'Tool did not provide a safe reclaim estimate.');
-      return {
-        id: definition.id,
-        label: definition.label,
-        estimatedBytes: estimate,
-        risk: 'safe',
-        reason: definition.reason,
-        fingerprint: createHash('sha256').update(result.stdout).digest('hex'),
-      };
-    }
-    const inspection = await inspectTreeAsync(path);
-    if (inspection.allocatedBytes === null || inspection.fingerprint === null)
-      return reportOnly(definition, inspection.blockers.join(', '), path);
-    return {
-      id: definition.id,
-      label: definition.label,
-      path,
-      estimatedBytes: inspection.allocatedBytes,
-      risk: 'safe',
-      reason: definition.reason,
-      fingerprint: inspection.fingerprint,
-    };
+    return await inspectToolOutputAsync(definition, result.stdout);
   } catch {
     return reportOnly(definition, `${command} is unavailable or inaccessible.`);
   }
+}
+
+/*** Convert a successful tool inventory response into one immutable cleanup candidate. */
+async function inspectToolOutputAsync(
+  definition: ToolCleanupDefinition,
+  output: string,
+): Promise<StorageCandidate> {
+  const path = definition.pathFromOutput?.(output) ?? null;
+  if (definition.reportOnlyReason)
+    return reportOnly(definition, definition.reportOnlyReason, path ?? undefined);
+  if (!path) return inspectUnpathedTool(definition, output);
+  const inspection = await inspectTreeAsync(path);
+  if (inspection.allocatedBytes === null || inspection.fingerprint === null)
+    return reportOnly(definition, inspection.blockers.join(', '), path);
+  return {
+    id: definition.id,
+    label: definition.label,
+    path,
+    estimatedBytes: inspection.allocatedBytes,
+    risk: 'safe',
+    reason: definition.reason,
+    fingerprint: inspection.fingerprint,
+  };
+}
+
+/*** Keep an unpathed tool report-only unless its own preview yields an exact reclaim estimate. */
+function inspectUnpathedTool(definition: ToolCleanupDefinition, output: string): StorageCandidate {
+  const estimate = definition.estimateFromOutput?.(output) ?? null;
+  const preview = definition.previewFromOutput?.(output) ?? null;
+  if (estimate === null)
+    return reportOnly(definition, 'Tool did not provide a safe reclaim estimate.');
+  return {
+    id: definition.id,
+    label: definition.label,
+    estimatedBytes: estimate,
+    risk: 'safe',
+    reason: definition.reason,
+    fingerprint: createHash('sha256').update(output).digest('hex'),
+    ...(preview ? { preview } : {}),
+  };
 }
 
 /*** Keep unavailable or unmeasurable tool candidates visible but never selectable. */

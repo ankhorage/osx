@@ -47,10 +47,12 @@ async function runCleanupAsync(
   const { context } = request;
   const operations = createDefaultStorageOperations(await realpath(home), context.cwd, context.env);
   const scanned = await operations.scan();
-  for (const item of scanned)
+  for (const item of scanned) {
     context.writeStdout(
       `${item.label}: ${item.path ?? 'unknown path'}; ${item.estimatedBytes ?? 'unknown'} allocated bytes; ${item.risk}; ${item.reason}\n`,
     );
+    if (item.preview) context.writeStdout(`${item.preview}\n`);
+  }
   const result = await cleanStorageAsync(
     { ...operations, scan: () => Promise.resolve(scanned) },
     createDecisions(interaction, (text) => context.writeStdout(text)),
@@ -75,7 +77,12 @@ function createDecisions(
     },
     async approve(selected) {
       write(
-        `Selected plan:\n${selected.map((item) => `  ${item.path}: ${item.estimatedBytes} estimated bytes`).join('\n')}\n`,
+        `Selected plan:\n${selected
+          .map(
+            (item) =>
+              `  ${item.path ?? item.label}: ${item.estimatedBytes} estimated bytes${item.preview ? `\n${item.preview}` : ''}`,
+          )
+          .join('\n')}\n`,
       );
       return (await interaction.confirm('Approve this cleanup plan?')) === 'confirmed';
     },
