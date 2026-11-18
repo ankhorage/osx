@@ -2,7 +2,7 @@ import { realpath } from 'node:fs/promises';
 
 import type { AnkhCommandExecutionRequest } from '@ankhorage/ankh';
 
-import { scanStorageAsync } from '../../../features/storage/composition/scanStorageAsync.js';
+import { createDefaultStorageOperations } from '../../../features/storage/composition/createDefaultStorageOperations.js';
 
 /*** Render the storage inventory without mutating the host. */
 export async function scan(request: AnkhCommandExecutionRequest): Promise<{ exitCode: number }> {
@@ -23,10 +23,11 @@ export async function scan(request: AnkhCommandExecutionRequest): Promise<{ exit
     return { exitCode: 1 };
   }
   try {
-    const candidates = await scanStorageAsync(await realpath(home), {
-      cwd: request.context.cwd,
-      env: request.context.env,
-    });
+    const candidates = await createDefaultStorageOperations(
+      await realpath(home),
+      request.context.cwd,
+      request.context.env,
+    ).scan();
     if (request.argv.includes('--json')) {
       request.context.writeStdout(`${JSON.stringify({ candidates }, null, 2)}\n`);
     } else {

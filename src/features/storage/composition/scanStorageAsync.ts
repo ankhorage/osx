@@ -1,17 +1,12 @@
 import { join } from 'node:path';
 
-import type { StorageCandidate } from '../../../types/storage.js';
-import { createBunCacheHost } from '../adapters/outbound/createBunCacheHost.js';
-import { createBunCacheOperations } from '../adapters/outbound/createBunCacheOperations.js';
+import type { StorageCandidate, StorageOperations } from '../../../types/storage.js';
 import { inspectTreeAsync } from '../adapters/outbound/inspectTreeAsync.js';
 
 /*** Inspect known user-owned cache and high-risk paths without changing them. */
 export async function scanStorageAsync(
   home: string,
-  options: { cwd: string; env: Readonly<Record<string, string | undefined>> } = {
-    cwd: process.cwd(),
-    env: process.env,
-  },
+  operations: readonly StorageOperations[] = [],
 ): Promise<readonly StorageCandidate[]> {
   const definitions = storagePaths(home);
   const inspections = await Promise.all(
@@ -20,11 +15,11 @@ export async function scanStorageAsync(
       inspection: await inspectTreeAsync(definition.path),
     })),
   );
-  const bun = await createBunCacheOperations(
-    createBunCacheHost(home, options.cwd, options.env),
-  ).scan();
+  const adapterCandidates = (
+    await Promise.all(operations.map(async (operation) => await operation.scan()))
+  ).flat();
   return [
-    ...bun,
+    ...adapterCandidates,
     ...inspections.map(({ definition, inspection }) => ({
       id: definition.id,
       label: definition.label,

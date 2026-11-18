@@ -3,28 +3,21 @@ import { resolve } from 'node:path';
 
 import type { BunCacheHost } from '../../../../types/bunCache.js';
 import type { StorageCandidate, StorageOperations } from '../../../../types/storage.js';
-import { emptyCacheAsync } from './emptyCacheAsync.js';
 import { inspectTreeAsync } from './inspectTreeAsync.js';
 import { resolveBunCacheAsync } from './resolveBunCacheAsync.js';
-import { withCacheLockAsync } from './withCacheLockAsync.js';
 
-/*** Inspect, revalidate and empty only the explicitly resolved Bun package cache. */
+/*** Report the Bun cache without enabling the deferred native mutation adapter. */
 export function createBunCacheOperations(host: BunCacheHost): StorageOperations {
   return {
     async scan() {
       return [await inspectBunCacheAsync(host)];
     },
-    async revalidate(candidate) {
-      return matches(candidate, await inspectBunCacheAsync(host));
+    async revalidate() {
+      return await Promise.resolve(false);
     },
-    async execute(candidate) {
-      if (!candidate.path) throw new Error('Cache path is unavailable.');
-      await withCacheLockAsync(candidate.path, async () => {
-        const current = await inspectBunCacheAsync(host);
-        if (!matches(candidate, current) || !current.path)
-          throw new Error('Cache changed or became unavailable.');
-        await emptyCacheAsync(current.path, current.fingerprint);
-      });
+    async execute() {
+      await Promise.resolve();
+      throw new Error('Direct Bun cache deletion is deferred to issue #6.');
     },
     async availableBytes() {
       return await host.freeBytes(host.home);
@@ -52,8 +45,8 @@ async function inspectBunCacheAsync(host: BunCacheHost): Promise<StorageCandidat
     ...base,
     path,
     estimatedBytes: inspection.allocatedBytes,
-    risk: reason ? 'report-only' : 'safe',
-    reason: reason || 'Regenerable Bun package cache',
+    risk: 'report-only',
+    reason: reason || 'Direct Bun cache deletion is deferred to issue #6',
     fingerprint: inspection.fingerprint ?? '',
   };
 }
@@ -81,17 +74,4 @@ async function preflightAsync(host: BunCacheHost, path: string): Promise<string>
   } catch {
     return 'cache preflight unavailable';
   }
-}
-
-/*** Require the entire approved identity and measured snapshot to remain unchanged. */
-function matches(approved: StorageCandidate, current: StorageCandidate): boolean {
-  return (
-    approved.id === 'bun-cache' &&
-    approved.risk === 'safe' &&
-    current.risk === 'safe' &&
-    approved.path === current.path &&
-    approved.fingerprint !== '' &&
-    approved.fingerprint === current.fingerprint &&
-    approved.estimatedBytes === current.estimatedBytes
-  );
 }

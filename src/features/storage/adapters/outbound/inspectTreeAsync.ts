@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { access, lstat, open, readdir, realpath } from 'node:fs/promises';
-import { resolve } from 'node:path';
-import { join } from 'node:path';
+import { access, lstat, readdir, realpath } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 
 /*** Inspect allocated bytes without following links or crossing filesystems; incomplete trees are blocked. */
 export async function inspectTreeAsync(
@@ -98,7 +97,7 @@ async function inspectEntryAsync(
   await inspectDirectoryAsync(path, logicalPath, entry, state);
 }
 
-/*** Traverse an opened directory through its descriptor, rejecting replacement races. */
+/*** Traverse a directory read-only using portable macOS path APIs. */
 async function inspectDirectoryAsync(
   path: string,
   logicalPath: string,
@@ -106,38 +105,18 @@ async function inspectDirectoryAsync(
   state: InspectionState,
 ): Promise<void> {
   try {
-    const handle = await open(
-      path,
-      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-    );
-    try {
-      const opened = await handle.stat({ bigint: true });
-      if (opened.dev !== entry.dev || opened.ino !== entry.ino) {
-        state.blockers.add('tree changed during inspection');
-        return;
+    if (state.requireWritable) await access(path, constants.W_OK | constants.X_OK);
+    const names = (await readdir(path)).sort();
+    for (const name of names) {
+      if (state.entries >= 100_000) {
+        state.blockers.add('inspection entry limit exceeded');
+        break;
       }
-      const anchored = `/dev/fd/${handle.fd}`;
-      if (state.requireWritable) await access(anchored, constants.W_OK | constants.X_OK);
-      const names = (await readdir(anchored)).sort();
-      for (const name of names) {
-        if (state.entries >= 100_000) {
-          state.blockers.add('inspection entry limit exceeded');
-          break;
-        }
-        const child = join(anchored, name);
-        await inspectEntryAsync(
-          child,
-          join(logicalPath, name),
-          await bigintStatAsync(child),
-          state,
-        );
-      }
-      const after = await handle.stat({ bigint: true });
-      if (fingerprint(entry) !== fingerprint(after))
-        state.blockers.add('tree changed during inspection');
-    } finally {
-      await handle.close();
+      const child = join(path, name);
+      await inspectEntryAsync(child, join(logicalPath, name), await bigintStatAsync(child), state);
     }
+    if (fingerprint(entry) !== fingerprint(await bigintStatAsync(path)))
+      state.blockers.add('tree changed during inspection');
   } catch (error) {
     state.blockers.add(describeError(error));
   }

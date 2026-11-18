@@ -3,7 +3,7 @@ import { realpath } from 'node:fs/promises';
 import type { AnkhCommandExecutionRequest, AnkhCommandInteraction } from '@ankhorage/ankh';
 
 import { cleanStorageAsync } from '../../../features/storage/application/cleanStorageAsync.js';
-import { createDefaultBunCacheOperations } from '../../../features/storage/composition/createDefaultBunCacheOperations.js';
+import { createDefaultStorageOperations } from '../../../features/storage/composition/createDefaultStorageOperations.js';
 import type { StorageCleanupResult, StorageDecisions } from '../../../types/storage.js';
 
 /*** Collect per-cache decisions and a final confirmation before any cleanup. */
@@ -45,11 +45,7 @@ async function runCleanupAsync(
   home: string,
 ): Promise<{ exitCode: number }> {
   const { context } = request;
-  const operations = createDefaultBunCacheOperations(
-    await realpath(home),
-    context.cwd,
-    context.env,
-  );
+  const operations = createDefaultStorageOperations(await realpath(home), context.cwd, context.env);
   const scanned = await operations.scan();
   for (const item of scanned)
     context.writeStdout(
