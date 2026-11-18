@@ -59,6 +59,10 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       cwd: extracted,
       env: { HOME: temp },
       version: 'test',
+      interaction: {
+        interactive: true,
+        confirm: async () => 'declined' as const,
+      },
       writeStdout: (text: string) => {
         output.push(text);
       },
@@ -100,9 +104,45 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       ),
     ).toBe(true);
     output.length = 0;
+    const layerAudit = await runCli(
+      ['osx', 'security', 'audit', '--layer', '4', '--non-interactive', '--json'],
+      options,
+    );
+    expect(layerAudit.exitCode).toBe(0);
+    expect(JSON.parse(output.join('')).results).toHaveLength(1);
+    expect(JSON.parse(output.join('')).results[0].control.id).toBe('osi4-service-exposure');
+    output.length = 0;
+    const categoryAudit = await runCli(
+      ['osx', 'security', 'audit', '--category', 'network-trust', '--non-interactive', '--json'],
+      options,
+    );
+    expect(categoryAudit.exitCode).toBe(0);
+    expect(JSON.parse(output.join('')).results[0].control.id).toBe('cross-layer-network-trust');
+    output.length = 0;
+    const guidedAudit = await runCli(['osx', 'security', 'audit'], options);
+    expect(guidedAudit.exitCode).toBe(0);
+    expect(output.join('')).toContain('[1/8] OSI layer 1');
+    expect(output.join('')).toContain('Skipped Cross-layer host security');
+    expect(output.join('')).toContain('does not declare the host secure');
+    output.length = 0;
     const controls = await runCli(['osx', 'security', 'controls', 'list', '--json'], options);
     expect(controls.exitCode).toBe(0);
     expect(JSON.parse(output.join('')).controls).toHaveLength(17);
+    expect(JSON.parse(output.join('')).controls[0].coverage).toBe('unsupported');
+    output.length = 0;
+    const aborted = await runCli(['osx', 'security', 'audit'], {
+      ...options,
+      context: {
+        ...context,
+        interaction: {
+          interactive: true,
+          confirm: async () => 'unavailable' as const,
+        },
+      },
+    });
+    expect(aborted.exitCode).toBe(130);
+    expect(errors.join('')).toContain('no report was saved');
+    errors.length = 0;
     output.length = 0;
     const scan = await runCli(['osx', 'storage', 'scan', '--json'], options);
     if (process.platform === 'darwin') {
