@@ -33,7 +33,7 @@ test('default security audit is deterministic and explicitly incomplete', () => 
   expect(report.coverage.osi[1].unsupported).toBe(1);
 });
 
-test('only valid evidence satisfying the active baseline may pass', () => {
+test('only facts satisfying the control-owned baseline predicate may pass', () => {
   const report = runSecurityAudit(createSecurityAuditCatalog(), profile, [
     observation({ evidence: [evidence()] }),
   ]);
@@ -54,7 +54,9 @@ test('only valid evidence satisfying the active baseline may pass', () => {
 
 test('baseline violations derive failure severity and keep cross-layer coverage primary-only', () => {
   const report = runSecurityAudit(createSecurityAuditCatalog(), profile, [
-    observation({ evidence: [evidence({ baselineStatus: 'violated' })] }),
+    observation({
+      evidence: [evidence({ facts: [{ id: 'secure-condition-observed', value: false }] })],
+    }),
   ]);
   const result = findControl(report, controlId);
 
@@ -79,8 +81,8 @@ test('missing, blocked, contradictory, and unknown applicability evidence fail c
     runSecurityAudit(createSecurityAuditCatalog(), profile, [
       observation({
         evidence: [
-          evidence({ id: 'secure', baselineStatus: 'satisfied' }),
-          evidence({ id: 'insecure', baselineStatus: 'violated' }),
+          evidence({ id: 'secure', facts: [{ id: 'secure-condition-observed', value: true }] }),
+          evidence({ id: 'insecure', facts: [{ id: 'secure-condition-observed', value: false }] }),
         ],
       }),
     ]),
@@ -166,18 +168,82 @@ test('a malformed active profile is incompatible rather than evaluated by a look
   expect(result.baseline.status).toBe('profile-incompatible');
 });
 
-test('audit rejects unknown or duplicate observations', () => {
+test('an incomplete baseline predicate cannot claim implemented coverage', () => {
+  const controls = createSecurityAuditCatalog().map((control) =>
+    control.id === controlId
+      ? {
+          ...control,
+          baselines: control.baselines.map((baseline) => ({
+            ...baseline,
+            predicate: { kind: 'all-boolean-facts' as const, facts: [] },
+          })),
+        }
+      : control,
+  );
+  const result = findControl(
+    runSecurityAudit(controls, profile, [observation({ evidence: [evidence()] })]),
+    controlId,
+  );
+
+  expect(result).toMatchObject({ outcome: 'unknown', coverage: 'unsupported', evidence: [] });
+  expect(result.baseline.status).toBe('profile-incompatible');
+});
+
+test('malformed observations fail closed without aborting the remaining audit', () => {
   const item = observation({ evidence: [] });
 
-  expect(() => runSecurityAudit(createSecurityAuditCatalog(), profile, [item, item])).toThrow(
-    'Duplicate audit observations',
+  const duplicate = findControl(
+    runSecurityAudit(createSecurityAuditCatalog(), profile, [item, item]),
+    controlId,
   );
-  expect(() =>
+  const unknown = findControl(
     runSecurityAudit(createSecurityAuditCatalog(), profile, [{ ...item, controlId: 'missing' }]),
-  ).toThrow('Unknown audit control');
+    controlId,
+  );
+
+  expect(duplicate).toMatchObject({ outcome: 'unknown', coverage: 'supported', evidence: [] });
+  expect(duplicate.baseline.status).toBe('invalid-evidence');
+  expect(unknown).toMatchObject({ outcome: 'unknown', coverage: 'unsupported', evidence: [] });
   expect(() =>
     runSecurityAudit([{ ...createSecurityAuditCatalog()[0]!, id: ' ' }], profile, []),
   ).toThrow('Invalid audit control identifier');
+});
+
+test('runtime JSON violations are omitted and fail closed without leaking the collector payload', () => {
+  const malformedValues: readonly object[] = [
+    { evidence: null },
+    { evidence: {} },
+    { evidence: [null] },
+    { evidence: [42] },
+    { evidence: [untypedEvidence({ id: null })] },
+    { evidence: [untypedEvidence({ kind: {} })] },
+    { evidence: [untypedEvidence({ summary: '/Users/secret/Keychain token' })] },
+    {
+      evidence: [untypedEvidence({ facts: [{ id: 'secure-condition-observed', value: 'true' }] })],
+    },
+  ];
+
+  for (const malformed of malformedValues) {
+    const result = findControl(
+      runSecurityAudit(createSecurityAuditCatalog(), profile, [untypedObservation(malformed)]),
+      controlId,
+    );
+    expect(result).toMatchObject({ outcome: 'unknown', coverage: 'supported', evidence: [] });
+    expect(result.baseline.status).toBe('invalid-evidence');
+    expect(JSON.stringify(result)).not.toContain('secret');
+  }
+});
+
+test('a collector baseline assertion without predicate facts remains unknown', () => {
+  const result = findControl(
+    runSecurityAudit(createSecurityAuditCatalog(), profile, [
+      observation({ evidence: [untypedEvidence({ baselineStatus: 'satisfied', facts: [] })] }),
+    ]),
+    controlId,
+  );
+
+  expect(result).toMatchObject({ outcome: 'unknown', coverage: 'supported', evidence: [] });
+  expect(result.baseline.status).toBe('invalid-evidence');
 });
 
 /** Construct a collector observation with only engine-owned evaluation fields omitted. */
@@ -202,7 +268,7 @@ function evidence(overrides: Partial<SecurityAuditEvidence> = {}): SecurityAudit
     summary: 'Redacted listener metadata was observed.',
     collectedAt: '2026-11-18T00:00:00.000Z',
     redacted: true,
-    baselineStatus: 'satisfied',
+    facts: [{ id: 'secure-condition-observed', value: true }],
     ...overrides,
   };
 }

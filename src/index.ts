@@ -9,6 +9,7 @@ export { scanStorageAsync } from './features/storage/composition/scanStorageAsyn
 export type {
   SecurityAuditApplicability,
   SecurityAuditBaseline,
+  SecurityAuditBaselinePredicate,
   SecurityAuditCategory,
   SecurityAuditConfidence,
   SecurityAuditControl,
@@ -17,6 +18,8 @@ export type {
   SecurityAuditCoverageTotals,
   SecurityAuditDetectionMode,
   SecurityAuditEvidence,
+  SecurityAuditEvidenceBooleanFact,
+  SecurityAuditExpectedBooleanFact,
   SecurityAuditObservation,
   SecurityAuditOutcome,
   SecurityAuditProfile,

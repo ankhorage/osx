@@ -30,10 +30,23 @@ export type SecurityAuditCoverage =
 
 export type SecurityAuditApplicability = 'applicable' | 'not-applicable' | 'unknown';
 
+/** A boolean condition which an engine can evaluate without trusting a collector conclusion. */
+export interface SecurityAuditExpectedBooleanFact {
+  readonly id: string;
+  readonly value: boolean;
+}
+
+/** A deterministic control-owned condition over redacted collector facts. */
+export interface SecurityAuditBaselinePredicate {
+  readonly kind: 'all-boolean-facts';
+  readonly facts: readonly SecurityAuditExpectedBooleanFact[];
+}
+
 /** A profile-specific condition that must hold before a control may pass. */
 export interface SecurityAuditBaseline {
   readonly profileId: string;
   readonly expectedSecureCondition: string;
+  readonly predicate: SecurityAuditBaselinePredicate;
   readonly failureSeverity: SecurityAuditSeverity;
 }
 
@@ -41,6 +54,12 @@ export interface SecurityAuditBaseline {
 export interface SecurityAuditRecommendation {
   readonly manualRemediation: string;
   readonly safeVerificationCommand?: readonly string[];
+}
+
+/** A redacted, typed source fact that can be checked against a control-owned predicate. */
+export interface SecurityAuditEvidenceBooleanFact {
+  readonly id: string;
+  readonly value: boolean;
 }
 
 /** A redacted, serializable fact collected for one control. */
@@ -53,7 +72,7 @@ export interface SecurityAuditEvidence {
   readonly summary: string;
   readonly collectedAt: string;
   readonly redacted: true;
-  readonly baselineStatus: 'satisfied' | 'violated';
+  readonly facts: readonly SecurityAuditEvidenceBooleanFact[];
 }
 
 /** A stable control definition; concrete collectors remain outside this portable model. */

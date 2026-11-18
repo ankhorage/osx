@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { scanStorageAsync } from '../src/features/storage/composition/scanStorageAsync.js';
 
 test('finds known paths while keeping inaccessible and risky paths report-only', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'osx-scan-'));
+  const home = await mkdtemp(join(await realpath(tmpdir()), 'osx-scan-'));
   try {
     await mkdir(join(home, '.npm', '_cacache'), { recursive: true });
     await writeFile(join(home, '.npm', '_cacache', 'test'), 'cached');

@@ -150,6 +150,10 @@ function control(
         profileId: 'macos-informational',
         expectedSecureCondition:
           'No insecure exposure is evidenced by a supported read-only collector.',
+        predicate: {
+          kind: 'all-boolean-facts',
+          facts: [{ id: 'secure-condition-observed', value: true }],
+        },
         failureSeverity: 'medium',
       },
     ],
@@ -179,6 +183,10 @@ function crossLayerControl(
         profileId: 'macos-informational',
         expectedSecureCondition:
           'No insecure exposure is evidenced by a supported read-only collector.',
+        predicate: {
+          kind: 'all-boolean-facts',
+          facts: [{ id: 'secure-condition-observed', value: true }],
+        },
         failureSeverity: 'medium',
       },
     ],

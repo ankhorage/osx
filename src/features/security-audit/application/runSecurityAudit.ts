@@ -3,14 +3,14 @@ import type {
   SecurityAuditBaselineEvaluation,
   SecurityAuditControl,
   SecurityAuditCoverage,
-  SecurityAuditCoverageMatrix,
-  SecurityAuditCoverageTotals,
   SecurityAuditEvidence,
   SecurityAuditObservation,
   SecurityAuditProfile,
   SecurityAuditReport,
   SecurityAuditResult,
 } from '../../../types/securityAudit.js';
+import { createSecurityAuditCoverageMatrix } from '../domain/createSecurityAuditCoverageMatrix.js';
+import { validateSecurityAuditFacts } from '../domain/validateSecurityAuditFacts.js';
 
 /*** Evaluate read-only observations from their validated evidence and the selected control baseline. */
 export function runSecurityAudit(
@@ -18,47 +18,50 @@ export function runSecurityAudit(
   profile: SecurityAuditProfile,
   observations: readonly SecurityAuditObservation[],
 ): SecurityAuditReport {
-  const observationsByControlId = new Map(
-    observations.map((observation) => [observation.controlId, observation]),
-  );
-  if (observationsByControlId.size !== observations.length)
-    throw new Error('Duplicate audit observations are ambiguous.');
   const controlsById = new Set(controls.map((control) => control.id));
   if (controlsById.size !== controls.length)
     throw new Error('Duplicate audit control identifiers are ambiguous.');
   if (controls.some((control) => !isNonEmpty(control.id)))
     throw new Error('Invalid audit control identifier.');
-  for (const observation of observations)
-    if (!controlsById.has(observation.controlId))
-      throw new Error(`Unknown audit control: ${observation.controlId}`);
+  const observationsByControlId = collectObservationsByControlId(controlsById, observations);
   const profileIsValid = isValidProfile(profile);
   const results = controls
     .map((control) =>
       createResult(control, profile, observationsByControlId.get(control.id), profileIsValid),
     )
     .sort((left, right) => left.control.id.localeCompare(right.control.id));
-  return { schemaVersion: 1, profile, results, coverage: createCoverageMatrix(results) };
+  return {
+    schemaVersion: 1,
+    profile,
+    results,
+    coverage: createSecurityAuditCoverageMatrix(results),
+  };
 }
 
 /** Create one result without trusting collector-supplied outcome, severity, coverage, or confidence. */
 function createResult(
   control: SecurityAuditControl,
   profile: SecurityAuditProfile,
-  observation: SecurityAuditObservation | undefined,
+  observation: unknown,
   profileIsValid: boolean,
 ): SecurityAuditResult {
   const baseline = control.baselines.find((candidate) => candidate.profileId === profile.id);
   if (!profileIsValid || !baseline || !isValidBaseline(baseline))
     return createUnknownResult(control, 'unsupported', 'profile-incompatible');
-  if (!observation)
+  if (observation === undefined)
     return createUnknownResult(control, 'unsupported', 'missing-evidence', baseline);
-  if (observation.access === 'permission-blocked')
+  if (!isRecord(observation))
+    return createUnknownResult(control, 'supported', 'invalid-evidence', baseline);
+  if (hasMetadataValue(observation, 'access', 'permission-blocked'))
     return createUnknownResult(control, 'permission-blocked', 'inaccessible-evidence', baseline);
   if (!hasMetadataValue(observation, 'access', 'available'))
     return createUnknownResult(control, 'supported', 'invalid-evidence', baseline);
   if (!hasValidApplicability(observation))
     return createUnknownResult(control, 'supported', 'invalid-evidence', baseline);
-  const evidence = [...observation.evidence].sort((left, right) => left.id.localeCompare(right.id));
+  if (!Array.isArray(observation.evidence))
+    return createUnknownResult(control, 'supported', 'invalid-evidence', baseline);
+  const evidence = sortEvidence(observation.evidence);
+  if (!evidence) return createUnknownResult(control, 'supported', 'invalid-evidence', baseline);
   if (evidence.length === 0)
     return createUnknownResult(control, 'supported', 'missing-evidence', baseline);
   if (!hasValidEvidence(evidence, control, profile, baseline))
@@ -67,26 +70,46 @@ function createResult(
     return createUnknownResult(control, 'implemented', 'applicability-unknown', baseline, evidence);
   if (observation.applicability === 'not-applicable')
     return createNotApplicableResult(control, baseline, evidence);
-  const baselineStatuses = new Set(evidence.map((item) => item.baselineStatus));
-  if (baselineStatuses.size !== 1)
-    return createUnknownResult(
-      control,
-      'implemented',
-      'contradictory-evidence',
-      baseline,
-      evidence,
-    );
-  if (baselineStatuses.has('violated')) return createFailedResult(control, baseline, evidence);
-  return createPassedResult(control, baseline, evidence);
+  return createPredicateResult(control, baseline, evidence);
+}
+
+/** Group untrusted collector records without allowing malformed or duplicate JSON to abort the report. */
+function collectObservationsByControlId(
+  controlsById: ReadonlySet<string>,
+  observations: unknown,
+): ReadonlyMap<string, unknown> {
+  if (!Array.isArray(observations)) return new Map();
+  return observations.reduce<ReadonlyMap<string, unknown>>((collected, observation) => {
+    if (
+      !isRecord(observation) ||
+      !isNonEmpty(observation.controlId) ||
+      !controlsById.has(observation.controlId)
+    )
+      return collected;
+    if (collected.has(observation.controlId))
+      return new Map([...collected, [observation.controlId, null]]);
+    return new Map([...collected, [observation.controlId, observation]]);
+  }, new Map());
+}
+
+/** Sort only validated evidence so malformed JSON is never echoed into a report. */
+function sortEvidence(value: readonly unknown[]): readonly SecurityAuditEvidence[] | undefined {
+  if (!value.every(isRecord)) return undefined;
+  if (!value.every((item) => typeof item.id === 'string')) return undefined;
+  return [...(value as unknown as readonly SecurityAuditEvidence[])].sort((left, right) =>
+    left.id.localeCompare(right.id),
+  );
 }
 
 /** Validate that the active profile names a versioned, internally consistent baseline. */
 function isValidProfile(profile: SecurityAuditProfile): boolean {
   return (
+    isRecord(profile) &&
     isNonEmpty(profile.id) &&
     isNonEmpty(profile.version) &&
     isNonEmpty(profile.title) &&
     isNonEmpty(profile.description) &&
+    isNonEmpty(profile.baseline) &&
     profile.baseline.endsWith(`-v${profile.version}`)
   );
 }
@@ -96,6 +119,7 @@ function isValidBaseline(baseline: SecurityAuditBaseline): boolean {
   return (
     isNonEmpty(baseline.profileId) &&
     isNonEmpty(baseline.expectedSecureCondition) &&
+    validateSecurityAuditFacts(undefined, baseline.predicate) &&
     (hasMetadataValue(baseline, 'failureSeverity', 'info') ||
       hasMetadataValue(baseline, 'failureSeverity', 'low') ||
       hasMetadataValue(baseline, 'failureSeverity', 'medium') ||
@@ -105,7 +129,7 @@ function isValidBaseline(baseline: SecurityAuditBaseline): boolean {
 }
 
 /** Validate collector applicability at the untyped adapter boundary. */
-function hasValidApplicability(observation: SecurityAuditObservation): boolean {
+function hasValidApplicability(observation: object): boolean {
   return (
     hasMetadataValue(observation, 'applicability', 'applicable') ||
     hasMetadataValue(observation, 'applicability', 'not-applicable') ||
@@ -123,6 +147,7 @@ function hasValidEvidence(
   const evidenceIds = new Set(evidence.map((item) => item.id));
   const evidenceIsValid = evidence.every(
     (item) =>
+      isRecord(item) &&
       isNonEmpty(item.id) &&
       isNonEmpty(item.kind) &&
       isNonEmpty(item.summary) &&
@@ -130,11 +155,9 @@ function hasValidEvidence(
       item.profileId === profile.id &&
       item.baselineVersion === profile.baseline &&
       hasMetadataValue(item, 'redacted', true) &&
-      (hasMetadataValue(item, 'baselineStatus', 'satisfied') ||
-        hasMetadataValue(item, 'baselineStatus', 'violated')) &&
+      validateSecurityAuditFacts(item.facts, baseline.predicate) &&
       isTimestamp(item.collectedAt) &&
-      !containsSensitiveContent(item.summary) &&
-      baseline.expectedSecureCondition.length > 0,
+      !containsSensitiveContent(item.summary),
   );
   return evidenceIds.size === evidence.length && evidenceIsValid;
 }
@@ -142,7 +165,7 @@ function hasValidEvidence(
 /** Read untrusted runtime metadata without relying on TypeScript's compile-time literal narrowing. */
 function hasMetadataValue(
   value: object,
-  key: 'access' | 'applicability' | 'baselineStatus' | 'failureSeverity' | 'redacted',
+  key: 'access' | 'applicability' | 'failureSeverity' | 'redacted',
   expected:
     | 'applicable'
     | 'available'
@@ -152,31 +175,71 @@ function hasMetadataValue(
     | 'low'
     | 'medium'
     | 'not-applicable'
-    | 'satisfied'
+    | 'permission-blocked'
     | 'unknown'
-    | 'violated'
     | true,
 ): boolean {
   return Object.getOwnPropertyDescriptor(value, key)?.value === expected;
 }
 
 /** Check a serializable metadata field without accepting whitespace-only values. */
-function isNonEmpty(value: string): boolean {
-  return value.trim().length > 0;
+function isNonEmpty(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 /** Accept only unambiguous ISO timestamps so reports remain machine-readable and comparable. */
-function isTimestamp(value: string): boolean {
+function isTimestamp(value: unknown): value is string {
   return (
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) && !Number.isNaN(Date.parse(value))
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
+    !Number.isNaN(Date.parse(value))
   );
 }
 
 /** Block common secret, identifier, address, and personal-path forms from a supposedly redacted summary. */
-function containsSensitiveContent(summary: string): boolean {
-  return /-----BEGIN|\b(password|passwd|secret|token|private[ _-]?key|keychain|ssid)\b|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b|\/Users\//i.test(
-    summary,
+function containsSensitiveContent(summary: unknown): boolean {
+  return (
+    typeof summary !== 'string' ||
+    /-----BEGIN|\b(password|passwd|secret|token|private[ _-]?key|keychain|ssid)\b|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b|\/Users\//i.test(
+      summary,
+    )
   );
+}
+
+/** Evaluate typed source facts against the control-owned predicate without collector status claims. */
+function createPredicateResult(
+  control: SecurityAuditControl,
+  baseline: SecurityAuditBaseline,
+  evidence: readonly SecurityAuditEvidence[],
+): SecurityAuditResult {
+  const facts = evidence.flatMap((item) => item.facts);
+  const valuesById = new Map<string, boolean[]>();
+  for (const fact of facts)
+    valuesById.set(fact.id, [...(valuesById.get(fact.id) ?? []), fact.value]);
+  const expectedFacts = baseline.predicate.facts;
+  if (expectedFacts.some((fact) => !valuesById.has(fact.id)))
+    return createUnknownResult(control, 'implemented', 'missing-evidence', baseline, evidence);
+  if (
+    expectedFacts.some((fact) => {
+      const values = valuesById.get(fact.id) ?? [];
+      return new Set(values).size !== 1;
+    })
+  )
+    return createUnknownResult(
+      control,
+      'implemented',
+      'contradictory-evidence',
+      baseline,
+      evidence,
+    );
+  if (expectedFacts.some((fact) => (valuesById.get(fact.id) ?? [])[0] !== fact.value))
+    return createFailedResult(control, baseline, evidence);
+  return createPassedResult(control, baseline, evidence);
+}
+
+/** Narrow externally supplied JSON before reading its fields. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** Produce a result that cannot accidentally be read as a successful security evaluation. */
@@ -274,53 +337,4 @@ function createBaselineEvaluation(
 /** Use evidence quantity only for a conservative, engine-owned confidence level. */
 function confidenceFor(evidence: readonly SecurityAuditEvidence[]): 'low' | 'medium' {
   return evidence.length === 1 ? 'low' : 'medium';
-}
-
-/** Count primary-category coverage only, so cross references cannot inflate completeness. */
-function createCoverageMatrix(
-  results: readonly SecurityAuditResult[],
-): SecurityAuditCoverageMatrix {
-  const osi = Object.fromEntries(
-    [1, 2, 3, 4, 5, 6, 7].map((layer) => [layer, emptyTotals()]),
-  ) as Record<1 | 2 | 3 | 4 | 5 | 6 | 7, SecurityAuditCoverageTotals>;
-  const themes = [
-    'hardware-startup-trust',
-    'disk-data',
-    'identity-access',
-    'privacy-permissions',
-    'malware-integrity',
-    'patching-exposure',
-    'network-trust',
-    'development-supply-chain',
-    'backups-resilience-logging',
-    'enterprise-policy',
-  ] as const;
-  const crossLayer = Object.fromEntries(themes.map((theme) => [theme, emptyTotals()])) as Record<
-    (typeof themes)[number],
-    SecurityAuditCoverageTotals
-  >;
-  for (const result of results) {
-    const category = result.control.primaryCategory;
-    if (category.kind === 'osi')
-      osi[category.layer] = addCoverage(osi[category.layer], result.coverage);
-    else crossLayer[category.theme] = addCoverage(crossLayer[category.theme], result.coverage);
-  }
-  return { osi, crossLayer };
-}
-
-/** Create an empty immutable-shaped coverage counter. */
-function emptyTotals(): SecurityAuditCoverageTotals {
-  return { implemented: 0, supported: 0, unsupported: 0, permissionBlocked: 0 };
-}
-
-/** Increment the one coverage state represented by a control result. */
-function addCoverage(
-  totals: SecurityAuditCoverageTotals,
-  coverage: SecurityAuditCoverage,
-): SecurityAuditCoverageTotals {
-  if (coverage === 'implemented') return { ...totals, implemented: totals.implemented + 1 };
-  if (coverage === 'supported') return { ...totals, supported: totals.supported + 1 };
-  if (coverage === 'permission-blocked')
-    return { ...totals, permissionBlocked: totals.permissionBlocked + 1 };
-  return { ...totals, unsupported: totals.unsupported + 1 };
 }
