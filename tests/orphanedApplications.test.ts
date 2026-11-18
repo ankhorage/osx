@@ -154,7 +154,7 @@ test('unavailable evidence blocks an absent bundle from being described as unins
       await scanOrphanedApplicationsAsync(home, unavailableInventoryHost())
     ).filter((observation) => observation.path.startsWith(home));
     expect(observations).toHaveLength(1);
-    expect(observations[0]?.evidence).toContain('installed application inventory is incomplete');
+    expect(observations[0]?.evidence).toContain('application ownership inventory is incomplete');
     expect(observations[0]?.blockers).toContain('spotlight evidence is unavailable');
     expect(observations[0]?.evidenceAvailability).toContainEqual({
       source: 'spotlight',

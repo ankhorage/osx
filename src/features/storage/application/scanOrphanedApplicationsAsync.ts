@@ -31,7 +31,12 @@ export async function scanOrphanedApplicationsAsync(
       ...cliSources,
     ].filter((source) => !source.available),
     evidenceSources: [...installedSources, ...receiptSources, ...processSources, ...cliSources],
-    installedInventoryComplete: installedSources.every((source) => source.available),
+    inventoryComplete: [
+      ...installedSources,
+      ...receiptSources,
+      ...processSources,
+      ...cliSources,
+    ].every((source) => source.available),
   };
   const roots = ownershipRoots(home);
   const entries = await Promise.all(
@@ -48,7 +53,7 @@ interface Inventory {
   readonly cli: ReadonlySet<string>;
   readonly unavailableSources: readonly OrphanedApplicationEvidenceSource[];
   readonly evidenceSources: readonly OrphanedApplicationEvidenceSource[];
-  readonly installedInventoryComplete: boolean;
+  readonly inventoryComplete: boolean;
 }
 interface OwnershipRoot {
   readonly path: string;
@@ -129,7 +134,7 @@ function observationFor(
   inventory: Inventory,
 ): OrphanedApplicationObservation | null {
   const blockers = protectionBlockers(bundleId, name, kind, inventory);
-  const missing = inventory.installedInventoryComplete && !inventory.installed.has(bundleId);
+  const missing = inventory.inventoryComplete && !inventory.installed.has(bundleId);
   if (!missing && blockers.length === 0) return null;
   return {
     bundleId,
@@ -140,7 +145,7 @@ function observationFor(
     evidence: [
       `${allocatedBytes} allocated bytes`,
       `bundle identifier: ${bundleId}`,
-      installationEvidence(missing, inventory.installedInventoryComplete),
+      installationEvidence(missing, inventory.inventoryComplete),
     ],
     evidenceAvailability: inventory.evidenceSources.map(({ source, available }) => ({
       source,
@@ -151,11 +156,11 @@ function observationFor(
   };
 }
 
-/*** Describe absence only after every installed-application source completed successfully. */
-function installationEvidence(missing: boolean, installedInventoryComplete: boolean): string {
+/*** Describe absence only after every ownership evidence source completed successfully. */
+function installationEvidence(missing: boolean, inventoryComplete: boolean): string {
   if (missing) return 'matching installed bundle was not found in complete inventory';
-  if (installedInventoryComplete) return 'matching installed bundle was found';
-  return 'installed application inventory is incomplete';
+  if (inventoryComplete) return 'matching installed bundle was found';
+  return 'application ownership inventory is incomplete';
 }
 
 /** Accept exact bundle-id roots and manifest-backed hidden configuration, never arbitrary dotdirectories. */
