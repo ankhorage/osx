@@ -26,7 +26,7 @@ export type SecurityAuditConfidence = 'none' | 'low' | 'medium' | 'high';
 
 /** Report exactly why a control did or did not contribute host evidence. */
 export type SecurityAuditCoverage =
-  'implemented' | 'supported' | 'unsupported' | 'permission-blocked';
+  'implemented' | 'supported' | 'unsupported' | 'incomplete' | 'permission-blocked';
 
 export type SecurityAuditApplicability = 'applicable' | 'not-applicable' | 'unknown';
 
@@ -104,7 +104,7 @@ export interface SecurityAuditProfile {
 export interface SecurityAuditObservation {
   readonly controlId: string;
   readonly applicability: SecurityAuditApplicability;
-  readonly access: 'available' | 'permission-blocked';
+  readonly access: 'available' | 'incomplete' | 'permission-blocked';
   readonly evidence: readonly SecurityAuditEvidence[];
 }
 
@@ -116,6 +116,7 @@ export interface SecurityAuditBaselineEvaluation {
     | 'verified'
     | 'missing-evidence'
     | 'invalid-evidence'
+    | 'incomplete-evidence'
     | 'inaccessible-evidence'
     | 'applicability-unknown'
     | 'contradictory-evidence'
@@ -139,6 +140,7 @@ export interface SecurityAuditCoverageTotals {
   readonly implemented: number;
   readonly supported: number;
   readonly unsupported: number;
+  readonly incomplete: number;
   readonly permissionBlocked: number;
 }
 
