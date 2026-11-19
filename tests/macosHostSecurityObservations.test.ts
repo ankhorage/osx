@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
+import { rm } from 'node:fs/promises';
 
 import {
-  collectMacosHostSecurityObservations,
+  collectMacosHostSecurityObservationsAsync,
   createMacosHostSecuritySupportMatrix,
   createSecurityAuditCatalog,
   createSecurityAuditProfile,
@@ -13,8 +14,8 @@ const collectedAt = '2026-11-18T00:00:00.000Z';
 const profile = createSecurityAuditProfile();
 const hardwareControlId = 'cross-layer-hardware-startup-trust';
 
-test('collects SIP and Authenticated Root as separate redacted evidence sources for one observation', () => {
-  const observations = collect(secureRunner);
+test('collects SIP and Authenticated Root as separate redacted evidence sources for one observation', async () => {
+  const observations = await collect(secureRunner);
   const hardware = findObservation(observations, hardwareControlId);
   expect(observations).toHaveLength(6);
   expect(new Set(observations.map((observation) => observation.controlId)).size).toBe(6);
@@ -32,32 +33,32 @@ test('collects SIP and Authenticated Root as separate redacted evidence sources 
   expect(JSON.stringify(observations)).not.toContain('host-private-value');
 });
 
-test('integrates two evidence sources only through a control-owned test baseline', () => {
+test('integrates two evidence sources only through a control-owned test baseline', async () => {
   const hardware = findResult(
-    runSecurityAudit(controlsWithHardwareBaseline(), profile, collect(secureRunner)),
+    runSecurityAudit(controlsWithHardwareBaseline(), profile, await collect(secureRunner)),
     hardwareControlId,
   );
   expect(hardware).toMatchObject({ outcome: 'pass', coverage: 'implemented' });
   expect(hardware.baseline.evidenceIds).toEqual(['authenticated-root-status', 'sip-status']);
 });
 
-test('fails the joint test baseline when Authenticated Root is explicitly disabled', () => {
+test('fails the joint test baseline when Authenticated Root is explicitly disabled', async () => {
   const hardware = findResult(
     runSecurityAudit(
       controlsWithHardwareBaseline(),
       profile,
-      collect(authenticatedRootDisabledRunner),
+      await collect(authenticatedRootDisabledRunner),
     ),
     hardwareControlId,
   );
   expect(hardware).toMatchObject({ outcome: 'fail', coverage: 'implemented' });
 });
 
-test('preserves permission, failed-command, and unrecognized-output states as non-passing evidence', () => {
-  const blocked = collect(permissionBlockedRunner);
-  const failed = collect(failedRunner);
+test('preserves permission, failed-command, and unrecognized-output states as non-passing evidence', async () => {
+  const blocked = await collect(permissionBlockedRunner);
+  const failed = await collect(failedRunner);
   const unrecognized = findObservation(
-    collect(unrecognizedTimeMachineRunner),
+    await collect(unrecognizedTimeMachineRunner),
     'cross-layer-backups-resilience-logging',
   );
   expect(blocked.every((observation) => observation.access === 'permission-blocked')).toBe(true);
@@ -69,21 +70,23 @@ test('preserves permission, failed-command, and unrecognized-output states as no
   });
 });
 
-test('does not infer backup encryption, recovery, or compliance from destination and enrollment facts', () => {
-  const backup = findObservation(collect(secureRunner), 'cross-layer-backups-resilience-logging');
+test('does not infer backup encryption, recovery, or compliance from destination and enrollment facts', async () => {
+  const observations = await collect(secureRunner);
+  const backup = findObservation(observations, 'cross-layer-backups-resilience-logging');
   const enterprise = findResult(
-    runSecurityAudit(createSecurityAuditCatalog(), profile, collect(secureRunner)),
+    runSecurityAudit(createSecurityAuditCatalog(), profile, observations),
     'cross-layer-enterprise-policy',
   );
   expect(backup.evidence[0]?.summary).toContain('does not verify backup encryption or recovery');
-  expect(enterprise).toMatchObject({ outcome: 'unknown', coverage: 'unsupported' });
+  expect(enterprise).toMatchObject({ outcome: 'unknown', coverage: 'implemented' });
+  expect(enterprise.evidence).toHaveLength(1);
   expect(JSON.stringify(enterprise)).not.toContain('compliance pass');
 });
 
-test('does not run macOS commands or claim applicability on another platform', () => {
-  const observations = collect({
+test('does not run macOS commands or claim applicability on another platform', async () => {
+  const observations = await collect({
     platform: 'linux',
-    run() {
+    async runAsync() {
       throw new Error('must not run');
     },
   });
@@ -105,7 +108,7 @@ test.skipIf(process.platform !== 'darwin')(
   async () => {
     const { createMacosSecurityAuditCommandRunner } = await import('../src/index.js');
     const serialized = JSON.stringify(
-      collectMacosHostSecurityObservations({
+      await collectMacosHostSecurityObservationsAsync({
         runner: createMacosSecurityAuditCommandRunner(),
         profile,
         collectedAt,
@@ -116,9 +119,33 @@ test.skipIf(process.platform !== 'darwin')(
   },
 );
 
+test.skipIf(process.platform !== 'darwin')(
+  'audit command runner terminates and reaps a SIGTERM-ignoring child process group',
+  async () => {
+    const { createMacosSecurityAuditCommandRunner } = await import('../src/index.js');
+    const marker = `/tmp/ankhorage-osx-security-audit-${process.pid}-${Date.now()}`;
+    try {
+      const result = await createMacosSecurityAuditCommandRunner().runAsync(
+        '/bin/sh',
+        [
+          '-c',
+          `trap '' TERM; (trap '' TERM; while :; do :; done) & child=$!; printf '%s' "$child" > ${marker}; wait`,
+        ],
+        { timeoutMilliseconds: 50 },
+      );
+      expect(result).toEqual({ kind: 'timed-out' });
+      const childProcessId = Number(await Bun.file(marker).text());
+      expect(Number.isSafeInteger(childProcessId)).toBe(true);
+      expect(() => process.kill(childProcessId, 0)).toThrow();
+    } finally {
+      await rm(marker, { force: true });
+    }
+  },
+);
+
 /** Collect host observations with the fixed profile and deterministic collection timestamp. */
 function collect(runner: MacosSecurityAuditCommandRunner) {
-  return collectMacosHostSecurityObservations({ runner, profile, collectedAt });
+  return collectMacosHostSecurityObservationsAsync({ runner, profile, collectedAt });
 }
 
 /** Return recognized benign output for every fixed read-only host command. */
@@ -157,16 +184,16 @@ const unrecognizedTimeMachineRunner = runner({
 /** Model a command runner that never obtains a usable source result. */
 const failedRunner: MacosSecurityAuditCommandRunner = {
   platform: 'darwin',
-  run() {
-    return { kind: 'failed' };
+  async runAsync() {
+    return { kind: 'failed' as const };
   },
 };
 
 /** Model a command runner whose every source is access-blocked. */
 const permissionBlockedRunner: MacosSecurityAuditCommandRunner = {
   platform: 'darwin',
-  run() {
-    return { kind: 'permission-denied' };
+  async runAsync() {
+    return { kind: 'permission-denied' as const };
   },
 };
 
@@ -174,8 +201,11 @@ const permissionBlockedRunner: MacosSecurityAuditCommandRunner = {
 function runner(outputs: Readonly<Record<string, string>>): MacosSecurityAuditCommandRunner {
   return {
     platform: 'darwin',
-    run(command, arguments_) {
-      return { kind: 'available', stdout: outputs[[command, ...arguments_].join(' ')] ?? '' };
+    async runAsync(command, arguments_) {
+      return {
+        kind: 'available' as const,
+        stdout: outputs[[command, ...arguments_].join(' ')] ?? '',
+      };
     },
   };
 }

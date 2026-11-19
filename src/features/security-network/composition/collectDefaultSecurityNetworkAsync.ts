@@ -3,6 +3,9 @@ import { createSecurityNetworkHost } from '../adapters/outbound/createSecurityNe
 import { collectSecurityNetworkAsync } from '../application/collectSecurityNetworkAsync.js';
 
 /*** Collect the default passive macOS Layer 3 and 4 evidence through the local process adapter. */
-export async function collectDefaultSecurityNetworkAsync(): Promise<SecurityNetworkEvidence> {
-  return collectSecurityNetworkAsync(createSecurityNetworkHost());
+export async function collectDefaultSecurityNetworkAsync(
+  layers?: ReadonlySet<3 | 4>,
+  input: { readonly signal?: AbortSignal } = {},
+): Promise<SecurityNetworkEvidence> {
+  return collectSecurityNetworkAsync(createSecurityNetworkHost(), layers, input);
 }

@@ -8,11 +8,15 @@ import { collectLayer4CommandResultsAsync } from './collectLayer4CommandResultsA
 /*** Collect passive macOS Layer 3 and 4 evidence without scans, privilege escalation, or sensitive output. */
 export async function collectSecurityNetworkAsync(
   host: SecurityNetworkHost,
+  layers: ReadonlySet<3 | 4> = new Set([3, 4]),
+  input: { readonly signal?: AbortSignal } = {},
 ): Promise<SecurityNetworkEvidence> {
-  const [layer3Results, layer4Results] = await Promise.all([
-    collectLayer3CommandResultsAsync(host),
-    collectLayer4CommandResultsAsync(host),
-  ]);
+  const layer3Results = layers.has(3)
+    ? await collectLayer3CommandResultsAsync(host, input)
+    : unavailableLayer3Results();
+  const layer4Results = layers.has(4)
+    ? await collectLayer4CommandResultsAsync(host, input)
+    : unavailableLayer4Results();
 
   return {
     collectedAt: host.now(),
@@ -24,4 +28,30 @@ export async function collectSecurityNetworkAsync(
       'QUIC remains unknown without protocol-specific local evidence.',
     ],
   };
+}
+
+/** Represent deliberately unrequested sources as unavailable without executing their commands. */
+function unavailableLayer3Results(): Awaited<ReturnType<typeof collectLayer3CommandResultsAsync>> {
+  return [
+    unavailableResult(),
+    unavailableResult(),
+    unavailableResult(),
+    unavailableResult(),
+    unavailableResult(),
+    unavailableResult(),
+    unavailableResult(),
+    unavailableResult(),
+    unavailableResult(),
+    unavailableResult(),
+  ];
+}
+
+/** Represent deliberately unrequested sources as unavailable without executing their commands. */
+function unavailableLayer4Results(): Awaited<ReturnType<typeof collectLayer4CommandResultsAsync>> {
+  return [unavailableResult(), unavailableResult(), unavailableResult(), unavailableResult()];
+}
+
+/** Use one explicit unavailable result for each deliberately unrequested source. */
+function unavailableResult() {
+  return { exitCode: null, stdout: '', status: 'unsupported' as const };
 }

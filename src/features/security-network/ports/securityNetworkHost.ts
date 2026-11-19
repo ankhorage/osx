@@ -11,6 +11,9 @@ export interface SecurityNetworkCommandResult {
 
 /** Read-only host capability required by the OSI Layer 3 and 4 collector. */
 export interface SecurityNetworkHost {
-  readonly executeAsync: (command: readonly string[]) => Promise<SecurityNetworkCommandResult>;
+  readonly executeAsync: (
+    command: readonly string[],
+    input?: { readonly signal?: AbortSignal },
+  ) => Promise<SecurityNetworkCommandResult>;
   readonly now: () => string;
 }

@@ -16,12 +16,13 @@ export async function collectSessionExposureObservationAsync(
   runner: MacosSecurityCommandRunner,
   profile: SecurityAuditProfile,
   collectedAt: string,
+  input: { readonly signal?: AbortSignal } = {},
 ): Promise<SecurityAuditObservation> {
   const [remoteLogin, sharing, disabledServices, listeners] = await Promise.all([
-    runner.runAsync(['/usr/sbin/systemsetup', '-getremotelogin']),
-    runner.runAsync(['/usr/sbin/sharing', '-l']),
-    runner.runAsync(['/bin/launchctl', 'print-disabled', 'system']),
-    runner.runAsync(['/usr/sbin/netstat', '-an', '-p', 'tcp']),
+    runner.runAsync(['/usr/sbin/systemsetup', '-getremotelogin'], input),
+    runner.runAsync(['/usr/sbin/sharing', '-l'], input),
+    runner.runAsync(['/bin/launchctl', 'print-disabled', 'system'], input),
+    runner.runAsync(['/usr/sbin/netstat', '-an', '-p', 'tcp'], input),
   ]);
   const available = [remoteLogin, sharing, disabledServices, listeners].filter(
     (result) => result.exitCode === 0,

@@ -15,14 +15,15 @@ interface CollectorInput {
   readonly runner: MacosSecurityAuditCommandRunner;
   readonly profile: SecurityAuditProfile;
   readonly collectedAt: string;
+  readonly signal?: AbortSignal;
 }
 
 /*** Collect redacted, passive OSI 1 and 2 observations without exposing host identifiers or mutating macOS. */
-export function collectMacosPhysicalAndLinkObservations(
+export async function collectMacosPhysicalAndLinkObservationsAsync(
   input: CollectorInput,
-): readonly SecurityAuditObservation[] {
+): Promise<readonly SecurityAuditObservation[]> {
   if (input.runner.platform !== 'darwin') return unsupportedPlatformObservations(input);
-  const sources = collectSources(input.runner);
+  const sources = await collectSourcesAsync(input.runner, input.signal);
   return [physicalObservation(input, sources), linkObservation(input, sources)];
 }
 
@@ -42,18 +43,31 @@ interface InterfaceStatusInventory {
 }
 
 /*** Query only public, local macOS inspection commands through the injected outer boundary. */
-function collectSources(runner: MacosSecurityAuditCommandRunner): MacosPhysicalAndLinkSources {
-  const hardwarePorts = runner.run('/usr/sbin/networksetup', ['-listallhardwareports']);
-  const interfaces = runner.run('/sbin/ifconfig', ['-l']);
-  const interfaceStatusInventory = interfaceStatusResults(runner, interfaces);
-  const deviceInventory = runner.run('/usr/sbin/system_profiler', [
-    'SPUSBDataType',
-    'SPThunderboltDataType',
-    'SPBluetoothDataType',
-    '-json',
-  ]);
-  const airportMetadata = runner.run('/usr/sbin/system_profiler', ['SPAirPortDataType', '-json']);
-  const neighbors = runner.run('/usr/sbin/arp', ['-an']);
+async function collectSourcesAsync(
+  runner: MacosSecurityAuditCommandRunner,
+  signal: AbortSignal | undefined,
+): Promise<MacosPhysicalAndLinkSources> {
+  const hardwarePorts = await runCommandAsync(
+    runner,
+    '/usr/sbin/networksetup',
+    ['-listallhardwareports'],
+    signal,
+  );
+  const interfaces = await runCommandAsync(runner, '/sbin/ifconfig', ['-l'], signal);
+  const interfaceStatusInventory = await interfaceStatusResultsAsync(runner, interfaces, signal);
+  const deviceInventory = await runCommandAsync(
+    runner,
+    '/usr/sbin/system_profiler',
+    ['SPUSBDataType', 'SPThunderboltDataType', 'SPBluetoothDataType', '-json'],
+    signal,
+  );
+  const airportMetadata = await runCommandAsync(
+    runner,
+    '/usr/sbin/system_profiler',
+    ['SPAirPortDataType', '-json'],
+    signal,
+  );
+  const neighbors = await runCommandAsync(runner, '/usr/sbin/arp', ['-an'], signal);
   return {
     hardwarePorts,
     interfaces,
@@ -160,10 +174,11 @@ function unsupportedPlatformObservations(
 }
 
 /*** Query link state only for kernel-reported interface names and retain no interface names in evidence. */
-function interfaceStatusResults(
+async function interfaceStatusResultsAsync(
   runner: MacosSecurityAuditCommandRunner,
   interfaces: CommandResult,
-): InterfaceStatusInventory {
+  signal: AbortSignal | undefined,
+): Promise<InterfaceStatusInventory> {
   if (interfaces.kind !== 'available') return { results: [], truncated: false, parseFailed: false };
   const names = interfaces.stdout
     .trim()
@@ -172,12 +187,38 @@ function interfaceStatusResults(
     .sort();
   const uniqueNames = [...new Set(names)];
   return {
-    results: uniqueNames
-      .slice(0, maximumInterfaceStatusProbes)
-      .map((name) => runner.run('/sbin/ifconfig', [name], interfaceStatusProbeTimeoutMilliseconds)),
+    results: await Promise.all(
+      uniqueNames
+        .slice(0, maximumInterfaceStatusProbes)
+        .map((name) =>
+          runCommandAsync(
+            runner,
+            '/sbin/ifconfig',
+            [name],
+            signal,
+            interfaceStatusProbeTimeoutMilliseconds,
+          ),
+        ),
+    ),
     truncated: uniqueNames.length > maximumInterfaceStatusProbes,
     parseFailed: interfaces.stdout.trim().length > 0 && uniqueNames.length === 0,
   };
+}
+
+/*** Avoid starting another local command after the audit deadline has cancelled this collector. */
+async function runCommandAsync(
+  runner: MacosSecurityAuditCommandRunner,
+  command: string,
+  arguments_: readonly string[],
+  signal: AbortSignal | undefined,
+  timeoutMilliseconds?: number,
+): Promise<CommandResult> {
+  if (signal?.aborted) return { kind: 'timed-out' };
+  try {
+    return await runner.runAsync(command, arguments_, { signal, timeoutMilliseconds });
+  } catch {
+    return { kind: 'failed' };
+  }
 }
 
 /*** Preserve source failure categories while exposing only redacted aggregate facts. */

@@ -30,7 +30,7 @@ export function createSecurityNetworkAuditObservations(
         evidence.packetFilter.rulesAvailability,
         evidence.packetFilter.anchorsAvailability,
       ],
-      [...layer3Facts(evidence)],
+      layer3Facts(evidence),
       'Redacted routing, forwarding, VPN, extension, and packet-filter metadata was observed locally.',
     ),
     observation(
@@ -52,22 +52,73 @@ export function createSecurityNetworkAuditObservations(
 /** Keep L3 facts independently attributable to forwarding and packet-filter sources. */
 function layer3Facts(evidence: SecurityNetworkEvidence): readonly (readonly [string, boolean])[] {
   return [
-    ['ipv4-forwarding-disabled', evidence.layer3.ipv4Forwarding === 'disabled'],
-    ['ipv6-forwarding-disabled', evidence.layer3.ipv6Forwarding === 'disabled'],
-    ['packet-filter-enabled', evidence.packetFilter.status === 'enabled'],
-  ];
+    availabilitySettingFact(
+      'ipv4-forwarding-disabled',
+      evidence.layer3.ipv4ForwardingAvailability,
+      evidence.layer3.ipv4Forwarding,
+      'disabled',
+    ),
+    availabilitySettingFact(
+      'ipv6-forwarding-disabled',
+      evidence.layer3.ipv6ForwardingAvailability,
+      evidence.layer3.ipv6Forwarding,
+      'disabled',
+    ),
+    availabilitySettingFact(
+      'packet-filter-enabled',
+      evidence.packetFilter.statusAvailability,
+      evidence.packetFilter.status,
+      'enabled',
+    ),
+  ].flatMap((fact) => (fact ? [fact] : []));
 }
 
 /** Keep L4 binding and Apple Application Firewall facts distinct. */
 function layer4Facts(evidence: SecurityNetworkEvidence): readonly (readonly [string, boolean])[] {
   return [
-    ['no-non-loopback-tcp-listeners-observed', evidence.layer4.tcpNonLoopbackListenerCount === 0],
-    ['application-firewall-enabled', evidence.applicationFirewall.globalState === 'enabled'],
-    [
+    availabilityObservedFact(
+      'no-non-loopback-tcp-listeners-observed',
+      evidence.layer4.tcpListenersAvailability,
+      evidence.layer4.tcpNonLoopbackListenerCount,
+      0,
+    ),
+    availabilitySettingFact(
+      'application-firewall-enabled',
+      evidence.applicationFirewall.globalStateAvailability,
+      evidence.applicationFirewall.globalState,
+      'enabled',
+    ),
+    availabilitySettingFact(
       'application-firewall-stealth-enabled',
-      evidence.applicationFirewall.stealthMode === 'enabled',
-    ],
-  ];
+      evidence.applicationFirewall.stealthModeAvailability,
+      evidence.applicationFirewall.stealthMode,
+      'enabled',
+    ),
+  ].flatMap((fact) => (fact ? [fact] : []));
+}
+
+/** Emit a fact only when its numeric source completed successfully. */
+function availabilityObservedFact(
+  id: string,
+  availability: SecurityNetworkEvidenceAvailability,
+  observed: number | 'unknown',
+  expected: number,
+): readonly [string, boolean] | undefined {
+  return availability === 'available' && observed !== 'unknown'
+    ? [id, observed === expected]
+    : undefined;
+}
+
+/** Never translate an unrecognized source setting into a negative security fact. */
+function availabilitySettingFact(
+  id: string,
+  availability: SecurityNetworkEvidenceAvailability,
+  observed: 'enabled' | 'disabled' | 'unknown',
+  expected: 'enabled' | 'disabled',
+): readonly [string, boolean] | undefined {
+  return availability === 'available' && observed !== 'unknown'
+    ? [id, observed === expected]
+    : undefined;
 }
 
 /** Preserve source limitations in coverage rather than interpreting unavailable measurements as negative facts. */
@@ -85,9 +136,7 @@ function observation(
     applicability: access === 'available' ? 'applicable' : 'unknown',
     access,
     evidence:
-      access === 'available'
-        ? [createEvidence(controlId, profile, collectedAt, facts, summary)]
-        : [],
+      facts.length === 0 ? [] : [createEvidence(controlId, profile, collectedAt, facts, summary)],
   };
 }
 

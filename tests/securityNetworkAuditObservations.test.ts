@@ -29,7 +29,7 @@ test('adapts complete L3 and L4 evidence with distinct source provenance and no 
   expect(JSON.stringify(observations)).not.toMatch(/192\.0\.2|example\.com|listener-name/i);
 });
 
-test('keeps partial and permission-blocked network sources unknown without manufacturing facts', () => {
+test('keeps successful partial sources visible while permission-blocked sources remain unknown', () => {
   const partial = createSecurityNetworkAuditObservations(
     {
       ...completeEvidence(),
@@ -39,11 +39,11 @@ test('keeps partial and permission-blocked network sources unknown without manuf
   );
   const blocked = createSecurityNetworkAuditObservations(permissionBlockedEvidence(), profile);
 
-  expect(partial[0]).toEqual({
+  expect(partial[0]).toMatchObject({
     controlId: 'osi3-routing-and-filtering',
     applicability: 'unknown',
     access: 'incomplete',
-    evidence: [],
+    evidence: [expect.objectContaining({ id: 'osi3-routing-and-filtering-network-summary' })],
   });
   expect(blocked).toEqual(
     expect.arrayContaining([

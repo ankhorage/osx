@@ -16,9 +16,10 @@ export async function collectApplicationPostureObservationAsync(
   runner: MacosSecurityCommandRunner,
   profile: SecurityAuditProfile,
   collectedAt: string,
+  input: { readonly signal?: AbortSignal } = {},
 ): Promise<SecurityAuditObservation> {
   const [dns, proxy, gatekeeper, signing, applicationAssessment, disabledServices, listeners] =
-    await collectApplicationPostureMetadataAsync(runner);
+    await collectApplicationPostureMetadataAsync(runner, input);
   const available = [
     dns,
     proxy,
@@ -49,26 +50,24 @@ export async function collectApplicationPostureObservationAsync(
 }
 
 /*** Read fixed local commands concurrently; no command output leaves this application boundary. */
-async function collectApplicationPostureMetadataAsync(runner: MacosSecurityCommandRunner) {
+async function collectApplicationPostureMetadataAsync(
+  runner: MacosSecurityCommandRunner,
+  input: { readonly signal?: AbortSignal },
+) {
   return Promise.all([
-    runner.runAsync(['/usr/sbin/scutil', '--dns']),
-    runner.runAsync(['/usr/sbin/scutil', '--proxy']),
-    runner.runAsync(['/usr/sbin/spctl', '--status']),
-    runner.runAsync([
-      '/usr/bin/codesign',
-      '-dv',
-      '--verbose=2',
-      '/System/Applications/Calculator.app',
-    ]),
-    runner.runAsync([
-      '/usr/sbin/spctl',
-      '--assess',
-      '--type',
-      'execute',
-      '/System/Applications/Calculator.app',
-    ]),
-    runner.runAsync(['/bin/launchctl', 'print-disabled', 'system']),
-    runner.runAsync(['/usr/sbin/netstat', '-an', '-p', 'tcp']),
+    runner.runAsync(['/usr/sbin/scutil', '--dns'], input),
+    runner.runAsync(['/usr/sbin/scutil', '--proxy'], input),
+    runner.runAsync(['/usr/sbin/spctl', '--status'], input),
+    runner.runAsync(
+      ['/usr/bin/codesign', '-dv', '--verbose=2', '/System/Applications/Calculator.app'],
+      input,
+    ),
+    runner.runAsync(
+      ['/usr/sbin/spctl', '--assess', '--type', 'execute', '/System/Applications/Calculator.app'],
+      input,
+    ),
+    runner.runAsync(['/bin/launchctl', 'print-disabled', 'system'], input),
+    runner.runAsync(['/usr/sbin/netstat', '-an', '-p', 'tcp'], input),
   ]);
 }
 

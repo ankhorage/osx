@@ -12,11 +12,14 @@ export async function executeSecurityNetworkCommandAsync(
   limits: {
     readonly timeoutMs?: number;
     readonly outputLimitBytes?: number;
+    readonly signal?: AbortSignal;
   } = {},
 ): Promise<SecurityNetworkCommandResult> {
   try {
     const process = Bun.spawn({ cmd: [...command], stdout: 'pipe', stderr: 'pipe' });
     const state = createCommandState(process, limits);
+    const stopForAbort = () => state.stop('timeout');
+    limits.signal?.addEventListener('abort', stopForAbort, { once: true });
     const timer = setTimeout(() => state.stop('timeout'), state.timeoutMs);
     try {
       const [stdout, stderr, exitCode] = await Promise.all([
@@ -34,6 +37,7 @@ export async function executeSecurityNetworkCommandAsync(
       return { exitCode: null, stdout: '', status: 'failed' };
     } finally {
       clearTimeout(timer);
+      limits.signal?.removeEventListener('abort', stopForAbort);
     }
   } catch (error) {
     return { exitCode: null, stdout: '', status: spawnFailureStatus(error) };
@@ -43,7 +47,11 @@ export async function executeSecurityNetworkCommandAsync(
 /** Track one process-wide output budget and the first reason its command was stopped. */
 function createCommandState(
   process: ReturnType<typeof Bun.spawn>,
-  limits: { readonly timeoutMs?: number; readonly outputLimitBytes?: number },
+  limits: {
+    readonly timeoutMs?: number;
+    readonly outputLimitBytes?: number;
+    readonly signal?: AbortSignal;
+  },
 ): {
   readonly outputLimitBytes: number;
   readonly status: SecurityNetworkCommandStatus | undefined;

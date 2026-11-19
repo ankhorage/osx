@@ -52,7 +52,7 @@ test('only facts satisfying the control-owned baseline predicate may pass', () =
   });
 });
 
-test('catalog baselines remain narrowly limited to independently collected startup and disk facts', () => {
+test('catalog baselines remain narrowly limited while valid no-baseline evidence stays visible', () => {
   const controls = createSecurityAuditCatalog();
   const report = runSecurityAudit(
     controls,
@@ -81,8 +81,9 @@ test('catalog baselines remain narrowly limited to independently collected start
       .every(
         (result) =>
           result.outcome === 'unknown' &&
-          result.coverage === 'unsupported' &&
-          result.baseline.status === 'profile-incompatible',
+          result.coverage === 'implemented' &&
+          result.baseline.status === 'profile-incompatible' &&
+          result.evidence.length === 1,
       ),
   ).toBe(true);
 });
@@ -188,7 +189,7 @@ test('invalid evidence metadata and sensitive summaries cannot reach a passing r
   }
 });
 
-test('a profile without a control baseline is incompatible rather than implicitly passing', () => {
+test('a control without a baseline retains valid evidence without implicitly passing', () => {
   const controls = controlsWithPredicate().map((control) =>
     control.id === controlId ? { ...control, baselines: [] } : control,
   );
@@ -197,8 +198,9 @@ test('a profile without a control baseline is incompatible rather than implicitl
     controlId,
   );
 
-  expect(result).toMatchObject({ outcome: 'unknown', coverage: 'unsupported' });
+  expect(result).toMatchObject({ outcome: 'unknown', coverage: 'implemented' });
   expect(result.baseline.status).toBe('profile-incompatible');
+  expect(result.evidence).toHaveLength(1);
 });
 
 test('a malformed active profile is incompatible rather than evaluated by a lookalike baseline', () => {

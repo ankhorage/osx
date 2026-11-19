@@ -16,11 +16,12 @@ export async function collectPresentationTrustObservationAsync(
   runner: MacosSecurityCommandRunner,
   profile: SecurityAuditProfile,
   collectedAt: string,
+  input: { readonly signal?: AbortSignal } = {},
 ): Promise<SecurityAuditObservation> {
   const [trustSettings, keychains, proxy] = await Promise.all([
-    runner.runAsync(['/usr/bin/security', 'dump-trust-settings', '-d']),
-    runner.runAsync(['/usr/bin/security', 'list-keychains', '-d', 'user']),
-    runner.runAsync(['/usr/sbin/scutil', '--proxy']),
+    runner.runAsync(['/usr/bin/security', 'dump-trust-settings', '-d'], input),
+    runner.runAsync(['/usr/bin/security', 'list-keychains', '-d', 'user'], input),
+    runner.runAsync(['/usr/sbin/scutil', '--proxy'], input),
   ]);
   const available = [trustSettings, keychains, proxy].filter((result) => result.exitCode === 0);
   if (available.length === 0) return createUnknownSecurityObservation(controlId);

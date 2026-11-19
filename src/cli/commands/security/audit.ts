@@ -7,7 +7,10 @@ import { createMacosSecurityAuditReportAsync } from '../../../features/security-
 import type { SecurityAuditReport, SecurityAuditResult } from '../../../types/securityAudit.js';
 
 /*** Run the read-only security audit as deterministic JSON or an explicitly skippable guided review. */
-export async function audit(request: AnkhCommandExecutionRequest): Promise<{ exitCode: number }> {
+export async function audit(
+  request: AuditRequest,
+  dependencies: AuditDependencies = {},
+): Promise<{ exitCode: number }> {
   const options = parseAuditOptions(request.argv);
   if (options === undefined) {
     request.context.writeStderr(
@@ -15,8 +18,8 @@ export async function audit(request: AnkhCommandExecutionRequest): Promise<{ exi
     );
     return { exitCode: 1 };
   }
-  const report = filterReport(await createMacosSecurityAuditReportAsync(), options);
   if (options.nonInteractive) {
+    const report = await createScopedReportAsync(options, dependencies);
     request.context.writeStdout(serializeSecurityAuditReport(report));
     return { exitCode: 0 };
   }
@@ -27,8 +30,19 @@ export async function audit(request: AnkhCommandExecutionRequest): Promise<{ exi
     );
     return { exitCode: 1 };
   }
-  return runGuidedAudit(request, report, interaction);
+  return runGuidedAudit(request, options, interaction, dependencies);
 }
+
+interface AuditDependencies {
+  readonly createReportAsync?: (controlIds: ReadonlySet<string>) => Promise<SecurityAuditReport>;
+}
+
+type AuditRequest = Pick<AnkhCommandExecutionRequest, 'argv'> & {
+  readonly context: Pick<
+    AnkhCommandExecutionRequest['context'],
+    'interaction' | 'writeStderr' | 'writeStdout'
+  >;
+};
 
 interface AuditOptions {
   readonly nonInteractive: boolean;
@@ -148,13 +162,51 @@ function filterReport(report: SecurityAuditReport, options: AuditOptions): Secur
   return report;
 }
 
+/** Scope the composition before collection, then retain the defensive report filter for injected ports. */
+async function createScopedReportAsync(
+  options: AuditOptions,
+  dependencies: AuditDependencies,
+): Promise<SecurityAuditReport> {
+  const controlIds = selectedControlIds(options);
+  const report = await (
+    dependencies.createReportAsync ??
+    ((ids) => createMacosSecurityAuditReportAsync({ controlIds: ids }))
+  )(controlIds);
+  return filterReport(report, options);
+}
+
+/** Resolve chapter controls from the portable catalog without collecting host evidence. */
+function selectedControlIds(options: AuditOptions): ReadonlySet<string> {
+  return new Set(
+    createDefaultSecurityAuditReport()
+      .results.filter((result) => matchesOptions(result, options))
+      .map((result) => result.control.id),
+  );
+}
+
+/** Share scope matching between report rendering and pre-collection selection. */
+function matchesOptions(result: SecurityAuditResult, options: AuditOptions): boolean {
+  if (options.layer !== undefined)
+    return (
+      result.control.primaryCategory.kind === 'osi' &&
+      result.control.primaryCategory.layer === options.layer
+    );
+  if (options.category !== undefined)
+    return (
+      result.control.primaryCategory.kind === 'cross-layer' &&
+      result.control.primaryCategory.theme === options.category
+    );
+  return true;
+}
+
 /** Render each selected chapter only after confirmation; declining skips it and input loss aborts without persistence. */
 async function runGuidedAudit(
-  request: AnkhCommandExecutionRequest,
-  report: SecurityAuditReport,
+  request: AuditRequest,
+  options: AuditOptions,
   interaction: NonNullable<AnkhCommandExecutionRequest['context']['interaction']>,
+  dependencies: AuditDependencies,
 ): Promise<{ exitCode: number }> {
-  const chapters = groupChapters(report.results);
+  const chapters = groupChapters(filterReport(createDefaultSecurityAuditReport(), options).results);
   for (const [index, chapter] of chapters.entries()) {
     request.context.writeStdout(`\n[${index + 1}/${chapters.length}] ${chapter.title}\n`);
     const confirmation = await interaction.confirm(
@@ -170,7 +222,11 @@ async function runGuidedAudit(
       request.context.writeStdout(`Skipped ${chapter.title}; no result is treated as secure.\n`);
       continue;
     }
-    for (const result of chapter.results)
+    const report = await (
+      dependencies.createReportAsync ??
+      ((ids) => createMacosSecurityAuditReportAsync({ controlIds: ids }))
+    )(new Set(chapter.results.map((result) => result.control.id)));
+    for (const result of report.results)
       renderResult(result, (text) => request.context.writeStdout(text));
   }
   request.context.writeStdout(

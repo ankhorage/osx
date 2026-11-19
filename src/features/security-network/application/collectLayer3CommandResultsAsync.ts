@@ -6,6 +6,7 @@ import type {
 /** Collect the fixed passive local commands needed for Layer 3 and pf evidence. */
 export async function collectLayer3CommandResultsAsync(
   host: SecurityNetworkHost,
+  input: { readonly signal?: AbortSignal } = {},
 ): Promise<
   readonly [
     SecurityNetworkCommandResult,
@@ -21,15 +22,15 @@ export async function collectLayer3CommandResultsAsync(
   ]
 > {
   return Promise.all([
-    host.executeAsync(['ifconfig', '-a']),
-    host.executeAsync(['netstat', '-rn', '-f', 'inet']),
-    host.executeAsync(['netstat', '-rn', '-f', 'inet6']),
-    host.executeAsync(['sysctl', '-n', 'net.inet.ip.forwarding']),
-    host.executeAsync(['sysctl', '-n', 'net.inet6.ip6.forwarding']),
-    host.executeAsync(['scutil', '--nc', 'list']),
-    host.executeAsync(['systemextensionsctl', 'list']),
-    host.executeAsync(['pfctl', '-s', 'info']),
-    host.executeAsync(['pfctl', '-sr']),
-    host.executeAsync(['pfctl', '-s', 'Anchors']),
+    host.executeAsync(['ifconfig', '-a'], input),
+    host.executeAsync(['netstat', '-rn', '-f', 'inet'], input),
+    host.executeAsync(['netstat', '-rn', '-f', 'inet6'], input),
+    host.executeAsync(['sysctl', '-n', 'net.inet.ip.forwarding'], input),
+    host.executeAsync(['sysctl', '-n', 'net.inet6.ip6.forwarding'], input),
+    host.executeAsync(['scutil', '--nc', 'list'], input),
+    host.executeAsync(['systemextensionsctl', 'list'], input),
+    host.executeAsync(['pfctl', '-s', 'info'], input),
+    host.executeAsync(['pfctl', '-sr'], input),
+    host.executeAsync(['pfctl', '-s', 'Anchors'], input),
   ]);
 }

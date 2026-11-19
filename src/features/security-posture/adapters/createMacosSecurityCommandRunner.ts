@@ -19,13 +19,14 @@ export function createMacosSecurityCommandRunner(
   } = {},
 ): MacosSecurityCommandRunner {
   return {
-    runAsync: (command) =>
+    runAsync: (command, input = {}) =>
       runAsync(command, {
         maximumOutputBytes: normalizeLimit(options.maximumOutputBytes, defaultMaximumOutputBytes),
         timeoutMilliseconds: normalizeLimit(
           options.timeoutMilliseconds,
           defaultTimeoutMilliseconds,
         ),
+        signal: input.signal,
       }),
   };
 }
@@ -33,7 +34,11 @@ export function createMacosSecurityCommandRunner(
 /*** Execute one fixed collector command and reap its complete process group before returning failure. */
 async function runAsync(
   command: readonly string[],
-  limits: { readonly maximumOutputBytes: number; readonly timeoutMilliseconds: number },
+  limits: {
+    readonly maximumOutputBytes: number;
+    readonly timeoutMilliseconds: number;
+    readonly signal?: AbortSignal;
+  },
 ): Promise<CommandResult> {
   if (process.platform !== 'darwin')
     return unavailableResult('macOS is required for this collector.');
@@ -61,7 +66,11 @@ async function runAsync(
 /*** Return a successful result only after both bounded streams and the command have completed. */
 async function raceCompletionAsync(
   subprocess: Bun.Subprocess<'ignore', 'pipe', 'pipe'>,
-  limits: { readonly maximumOutputBytes: number; readonly timeoutMilliseconds: number },
+  limits: {
+    readonly maximumOutputBytes: number;
+    readonly timeoutMilliseconds: number;
+    readonly signal?: AbortSignal;
+  },
 ): Promise<CommandResult | 'timeout' | undefined> {
   const completion = Promise.all([
     subprocess.exited,
@@ -75,7 +84,17 @@ async function raceCompletionAsync(
   return Promise.race([
     completion,
     waitAsync(limits.timeoutMilliseconds).then(() => 'timeout' as const),
+    waitForAbortAsync(limits.signal),
   ]);
+}
+
+/*** Resolve cancellation through the same reaping path as an individual timeout. */
+function waitForAbortAsync(signal: AbortSignal | undefined): Promise<'timeout'> {
+  if (!signal) return new Promise(() => undefined);
+  if (signal.aborted) return Promise.resolve('timeout');
+  return new Promise((resolve) =>
+    signal.addEventListener('abort', () => resolve('timeout'), { once: true }),
+  );
 }
 
 /*** Terminate the detached collector group, escalate once, and bound all reaping waits. */
