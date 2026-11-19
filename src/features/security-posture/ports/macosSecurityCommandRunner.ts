@@ -2,5 +2,6 @@
 export interface MacosSecurityCommandRunner {
   readonly runAsync: (
     command: readonly string[],
+    input?: { readonly signal?: AbortSignal },
   ) => Promise<{ readonly exitCode: number; readonly stdout: string; readonly stderr: string }>;
 }

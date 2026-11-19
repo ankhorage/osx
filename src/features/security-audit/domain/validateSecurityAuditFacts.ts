@@ -2,6 +2,7 @@ import type { SecurityAuditBaselinePredicate } from '../../../types/securityAudi
 
 /*** Validate control predicates and their matching redacted collector facts at the runtime boundary. */
 export function validateSecurityAuditFacts(facts: unknown, predicate: unknown): boolean {
+  if (predicate === undefined) return validUnbaselinedFacts(facts);
   if (!isValidPredicate(predicate)) return false;
   if (facts === undefined) return true;
   if (!Array.isArray(facts) || facts.length === 0) return false;
@@ -12,6 +13,22 @@ export function validateSecurityAuditFacts(facts: unknown, predicate: unknown): 
       isNonEmpty(fact.id) &&
       expectedFactIds.has(fact.id) &&
       typeof fact.value === 'boolean',
+  );
+}
+
+/** Validate redacted boolean facts for controls that intentionally have no policy baseline. */
+function validUnbaselinedFacts(facts: unknown): boolean {
+  return (
+    Array.isArray(facts) &&
+    facts.length > 0 &&
+    facts.every(
+      (fact) =>
+        isRecord(fact) &&
+        isNonEmpty(fact.id) &&
+        typeof fact.value === 'boolean' &&
+        !containsSensitiveContent(fact.id),
+    ) &&
+    new Set(facts.map((fact) => (isRecord(fact) ? fact.id : ''))).size === facts.length
   );
 }
 

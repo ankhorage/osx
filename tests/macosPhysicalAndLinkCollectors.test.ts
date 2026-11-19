@@ -1,15 +1,15 @@
 import { expect, test } from 'bun:test';
 
 import {
-  collectMacosPhysicalAndLinkObservations,
+  collectMacosPhysicalAndLinkObservationsAsync,
   createSecurityAuditProfile,
 } from '../src/index.js';
 
 const profile = createSecurityAuditProfile();
 const collectedAt = '2026-11-18T00:00:00.000Z';
 
-test('collects passive L1/L2 source availability while redacting all host and wireless identifiers', () => {
-  const observations = collectMacosPhysicalAndLinkObservations({
+test('collects passive L1/L2 source availability while redacting all host and wireless identifiers', async () => {
+  const observations = await collectMacosPhysicalAndLinkObservationsAsync({
     profile,
     collectedAt,
     runner: fixtureRunner({
@@ -40,8 +40,8 @@ test('collects passive L1/L2 source availability while redacting all host and wi
   });
 });
 
-test('reports missing passive macOS sources as incomplete rather than permission-blocked', () => {
-  const observations = collectMacosPhysicalAndLinkObservations({
+test('reports missing passive macOS sources as incomplete rather than permission-blocked', async () => {
+  const observations = await collectMacosPhysicalAndLinkObservationsAsync({
     profile,
     collectedAt,
     runner: fixtureRunner({}),
@@ -57,8 +57,8 @@ test('reports missing passive macOS sources as incomplete rather than permission
   ).toBe(true);
 });
 
-test('distinguishes permission, timeout, and malformed JSON without exposing source output', () => {
-  const observations = collectMacosPhysicalAndLinkObservations({
+test('distinguishes permission, timeout, and malformed JSON without exposing source output', async () => {
+  const observations = await collectMacosPhysicalAndLinkObservationsAsync({
     profile,
     collectedAt,
     runner: fixtureRunner({
@@ -86,15 +86,15 @@ test('distinguishes permission, timeout, and malformed JSON without exposing sou
   expect(JSON.stringify(observations)).not.toContain('{not-json');
 });
 
-test('bounds per-interface status probes and marks truncated inventory incomplete', () => {
+test('bounds per-interface status probes and marks truncated inventory incomplete', async () => {
   const calls: string[] = [];
-  const observations = collectMacosPhysicalAndLinkObservations({
+  const observations = await collectMacosPhysicalAndLinkObservationsAsync({
     profile,
     collectedAt,
     runner: {
       platform: 'darwin',
-      run(command, arguments_, timeoutMilliseconds) {
-        calls.push([command, ...arguments_, String(timeoutMilliseconds ?? '')].join(' '));
+      async runAsync(command, arguments_, input) {
+        calls.push([command, ...arguments_, String(input?.timeoutMilliseconds ?? '')].join(' '));
         if (command === '/sbin/ifconfig' && arguments_[0] === '-l')
           return { kind: 'available' as const, stdout: 'en0 en1 en2 en3 en4 en5' };
         if (command === '/sbin/ifconfig')
@@ -122,13 +122,13 @@ test('bounds per-interface status probes and marks truncated inventory incomplet
   ).toBe(true);
 });
 
-test('does not execute macOS commands or imply support on another platform', () => {
-  const observations = collectMacosPhysicalAndLinkObservations({
+test('does not execute macOS commands or imply support on another platform', async () => {
+  const observations = await collectMacosPhysicalAndLinkObservationsAsync({
     profile,
     collectedAt,
     runner: {
       platform: 'linux',
-      run() {
+      async runAsync() {
         throw new Error('must not run');
       },
     },
@@ -139,6 +139,47 @@ test('does not execute macOS commands or imply support on another platform', () 
   );
   expect(observations.every((observation) => observation.access === 'available')).toBe(true);
 });
+
+test('executes only L1 or L2 command sources selected at the command runner boundary', async () => {
+  const l1Calls: string[] = [];
+  const l2Calls: string[] = [];
+  await collectMacosPhysicalAndLinkObservationsAsync({
+    profile,
+    collectedAt,
+    controlIds: new Set(['osi1-physical-interface-inventory']),
+    runner: countingRunner(l1Calls),
+  });
+  await collectMacosPhysicalAndLinkObservationsAsync({
+    profile,
+    collectedAt,
+    controlIds: new Set(['osi2-link-security']),
+    runner: countingRunner(l2Calls),
+  });
+
+  expect(l1Calls).toContain('/usr/sbin/networksetup -listallhardwareports');
+  expect(l1Calls).not.toContain('/usr/sbin/system_profiler SPAirPortDataType -json');
+  expect(l1Calls).not.toContain('/usr/sbin/arp -an');
+  expect(l2Calls).not.toContain('/usr/sbin/networksetup -listallhardwareports');
+  expect(l2Calls).toContain('/usr/sbin/system_profiler SPAirPortDataType -json');
+  expect(l2Calls).toContain('/usr/sbin/arp -an');
+  expect(l1Calls.filter((call) => call === '/sbin/ifconfig -l')).toHaveLength(1);
+  expect(l2Calls.filter((call) => call === '/sbin/ifconfig -l')).toHaveLength(1);
+});
+
+/** Count actual command invocations while supplying only redacted fixture output. */
+function countingRunner(calls: string[]) {
+  return {
+    platform: 'darwin' as const,
+    async runAsync(command: string, arguments_: readonly string[]) {
+      calls.push([command, ...arguments_].join(' '));
+      if (command === '/sbin/ifconfig' && arguments_[0] === '-l')
+        return { kind: 'available' as const, stdout: 'en0' };
+      if (command === '/usr/sbin/system_profiler')
+        return { kind: 'available' as const, stdout: '{}' };
+      return { kind: 'available' as const, stdout: '' };
+    },
+  };
+}
 
 /** Create a deterministic, process-free macOS command fixture for collector behavior. */
 function fixtureRunner(
@@ -151,7 +192,7 @@ function fixtureRunner(
 ) {
   return {
     platform: 'darwin',
-    run(command: string, arguments_: readonly string[]) {
+    async runAsync(command: string, arguments_: readonly string[]) {
       const output = outputs[[command, ...arguments_].join(' ')];
       if (output === undefined) return { kind: 'missing' as const };
       return typeof output === 'string' ? { kind: 'available' as const, stdout: output } : output;

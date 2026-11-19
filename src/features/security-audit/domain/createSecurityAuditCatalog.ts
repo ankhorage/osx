@@ -75,6 +75,16 @@ const controls: readonly SecurityAuditControl[] = [
     'Startup protections and trusted extensions, independently of OSI layer classification.',
     'api',
     'Review startup security, SIP, signed system volume, and trusted extensions using supported APIs.',
+    [
+      baseline(
+        'SIP and Authenticated Root are enabled.',
+        [
+          ['system-integrity-protection-enabled', true],
+          ['authenticated-root-enabled', true],
+        ],
+        'high',
+      ),
+    ],
   ),
   crossLayerControl(
     'disk-data',
@@ -82,6 +92,7 @@ const controls: readonly SecurityAuditControl[] = [
     'Encryption and backup posture; availability is never presented as a verified restore test.',
     'api',
     'Review FileVault, external-volume encryption, backup encryption, and restore readiness without claiming a restore test occurred.',
+    [baseline('FileVault is enabled.', [['filevault-enabled', true]], 'high')],
   ),
   crossLayerControl(
     'identity-access',
@@ -177,6 +188,7 @@ function crossLayerControl(
   description: string,
   detectionMode: SecurityAuditControl['detectionMode'],
   recommendation: string,
+  baselines: SecurityAuditControl['baselines'] = [],
 ): SecurityAuditControl {
   return {
     id: `cross-layer-${theme}`,
@@ -188,8 +200,25 @@ function crossLayerControl(
     applicability: 'Applicable when macOS provides the required read-only local evidence.',
     detectionMode,
     prerequisites: ['macOS host access', 'read-only local evidence'],
-    baselines: [],
+    baselines,
     sourceReferences: ['https://support.apple.com/guide/security/welcome/web'],
     recommendation: { manualRemediation: recommendation },
+  };
+}
+
+/** Define a narrowly evidenced macOS v1 condition that the audit engine, not a collector, evaluates. */
+function baseline(
+  expectedSecureCondition: string,
+  facts: readonly (readonly [string, boolean])[],
+  failureSeverity: SecurityAuditControl['baselines'][number]['failureSeverity'],
+): SecurityAuditControl['baselines'][number] {
+  return {
+    profileId: 'macos-informational',
+    expectedSecureCondition,
+    predicate: {
+      kind: 'all-boolean-facts',
+      facts: facts.map(([id, value]) => ({ id, value })),
+    },
+    failureSeverity,
   };
 }

@@ -3,71 +3,49 @@ import type {
   SecurityAuditObservation,
   SecurityAuditProfile,
 } from '../../../../types/securityAudit.js';
+import {
+  collectMacosPhysicalAndLinkSourcesAsync,
+  type InterfaceStatusInventory,
+  type LinkSources,
+  type PhysicalSources,
+} from './collectMacosPhysicalAndLinkSourcesAsync.js';
 import type {
   MacosSecurityAuditCommandResult as CommandResult,
   MacosSecurityAuditCommandRunner,
 } from './createMacosSecurityAuditCommandRunner.js';
 
-const maximumInterfaceStatusProbes = 4;
-const interfaceStatusProbeTimeoutMilliseconds = 1_000;
-
 interface CollectorInput {
   readonly runner: MacosSecurityAuditCommandRunner;
   readonly profile: SecurityAuditProfile;
   readonly collectedAt: string;
+  readonly controlIds?: ReadonlySet<string>;
+  readonly signal?: AbortSignal;
 }
 
 /*** Collect redacted, passive OSI 1 and 2 observations without exposing host identifiers or mutating macOS. */
-export function collectMacosPhysicalAndLinkObservations(
+export async function collectMacosPhysicalAndLinkObservationsAsync(
   input: CollectorInput,
-): readonly SecurityAuditObservation[] {
+): Promise<readonly SecurityAuditObservation[]> {
   if (input.runner.platform !== 'darwin') return unsupportedPlatformObservations(input);
-  const sources = collectSources(input.runner);
-  return [physicalObservation(input, sources), linkObservation(input, sources)];
-}
-
-interface MacosPhysicalAndLinkSources {
-  readonly hardwarePorts: CommandResult;
-  readonly interfaces: CommandResult;
-  readonly interfaceStatusInventory: InterfaceStatusInventory;
-  readonly deviceInventory: CommandResult;
-  readonly airportMetadata: CommandResult;
-  readonly neighbors: CommandResult;
-}
-
-interface InterfaceStatusInventory {
-  readonly results: readonly CommandResult[];
-  readonly truncated: boolean;
-  readonly parseFailed: boolean;
-}
-
-/*** Query only public, local macOS inspection commands through the injected outer boundary. */
-function collectSources(runner: MacosSecurityAuditCommandRunner): MacosPhysicalAndLinkSources {
-  const hardwarePorts = runner.run('/usr/sbin/networksetup', ['-listallhardwareports']);
-  const interfaces = runner.run('/sbin/ifconfig', ['-l']);
-  const interfaceStatusInventory = interfaceStatusResults(runner, interfaces);
-  const deviceInventory = runner.run('/usr/sbin/system_profiler', [
-    'SPUSBDataType',
-    'SPThunderboltDataType',
-    'SPBluetoothDataType',
-    '-json',
-  ]);
-  const airportMetadata = runner.run('/usr/sbin/system_profiler', ['SPAirPortDataType', '-json']);
-  const neighbors = runner.run('/usr/sbin/arp', ['-an']);
-  return {
-    hardwarePorts,
-    interfaces,
-    interfaceStatusInventory,
-    deviceInventory,
-    airportMetadata,
-    neighbors,
-  };
+  const physical = includesControl(input, 'osi1-physical-interface-inventory');
+  const link = includesControl(input, 'osi2-link-security');
+  if (!physical && !link) return [];
+  const sources = await collectMacosPhysicalAndLinkSourcesAsync(
+    input.runner,
+    physical,
+    link,
+    input.signal,
+  );
+  return [
+    ...(sources.physical ? [physicalObservation(input, sources.physical)] : []),
+    ...(sources.link ? [linkObservation(input, sources.link)] : []),
+  ];
 }
 
 /*** Report the observable L1 boundary while keeping physical controls explicitly manual and unknown. */
 function physicalObservation(
   input: CollectorInput,
-  sources: MacosPhysicalAndLinkSources,
+  sources: PhysicalSources,
 ): SecurityAuditObservation {
   return observation(
     'osi1-physical-interface-inventory',
@@ -100,10 +78,7 @@ function physicalObservation(
 }
 
 /*** Report the observable L2 boundary without inferring wireless or neighbor-cache security from metadata. */
-function linkObservation(
-  input: CollectorInput,
-  sources: MacosPhysicalAndLinkSources,
-): SecurityAuditObservation {
+function linkObservation(input: CollectorInput, sources: LinkSources): SecurityAuditObservation {
   return observation(
     'osi2-link-security',
     'unknown',
@@ -146,38 +121,24 @@ function linkObservation(
 function unsupportedPlatformObservations(
   input: CollectorInput,
 ): readonly SecurityAuditObservation[] {
-  return ['osi1-physical-interface-inventory', 'osi2-link-security'].map((controlId) =>
-    observation(controlId, 'not-applicable', 'available', [
-      evidence(
-        input,
-        controlId,
-        'platform',
-        'macOS-only passive collector is not applicable on this platform.',
-        [['macos-host', false]],
-      ),
-    ]),
-  );
+  return ['osi1-physical-interface-inventory', 'osi2-link-security']
+    .filter((controlId) => includesControl(input, controlId))
+    .map((controlId) =>
+      observation(controlId, 'not-applicable', 'available', [
+        evidence(
+          input,
+          controlId,
+          'platform',
+          'macOS-only passive collector is not applicable on this platform.',
+          [['macos-host', false]],
+        ),
+      ]),
+    );
 }
 
-/*** Query link state only for kernel-reported interface names and retain no interface names in evidence. */
-function interfaceStatusResults(
-  runner: MacosSecurityAuditCommandRunner,
-  interfaces: CommandResult,
-): InterfaceStatusInventory {
-  if (interfaces.kind !== 'available') return { results: [], truncated: false, parseFailed: false };
-  const names = interfaces.stdout
-    .trim()
-    .split(/\s+/)
-    .filter((name) => /^[a-z]+\d+$/.test(name))
-    .sort();
-  const uniqueNames = [...new Set(names)];
-  return {
-    results: uniqueNames
-      .slice(0, maximumInterfaceStatusProbes)
-      .map((name) => runner.run('/sbin/ifconfig', [name], interfaceStatusProbeTimeoutMilliseconds)),
-    truncated: uniqueNames.length > maximumInterfaceStatusProbes,
-    parseFailed: interfaces.stdout.trim().length > 0 && uniqueNames.length === 0,
-  };
+/** Treat an omitted scope as the public collector's complete L1/L2 request. */
+function includesControl(input: CollectorInput, controlId: string): boolean {
+  return input.controlIds?.has(controlId) ?? true;
 }
 
 /*** Preserve source failure categories while exposing only redacted aggregate facts. */

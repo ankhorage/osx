@@ -12,6 +12,8 @@ interface CollectorInput {
   readonly runner: MacosSecurityAuditCommandRunner;
   readonly profile: SecurityAuditProfile;
   readonly collectedAt: string;
+  readonly controlIds?: ReadonlySet<string>;
+  readonly signal?: AbortSignal;
 }
 
 interface SourceCheck {
@@ -30,11 +32,19 @@ interface ControlCheck {
 }
 
 /*** Collect passive, redacted host-security observations without asserting a security baseline. */
-export function collectMacosHostSecurityObservations(
+export async function collectMacosHostSecurityObservationsAsync(
   input: CollectorInput,
-): readonly SecurityAuditObservation[] {
+): Promise<readonly SecurityAuditObservation[]> {
   if (input.runner.platform !== 'darwin') return unsupportedPlatformObservations(input);
-  return controls.map((controlCheck) => createObservation(controlCheck, input));
+  const selected = controls.filter(
+    (controlCheck) => input.controlIds?.has(controlCheck.controlId) ?? true,
+  );
+  const observations: SecurityAuditObservation[] = [];
+  for (const controlCheck of selected) {
+    if (input.signal?.aborted) break;
+    observations.push(await createObservationAsync(controlCheck, input));
+  }
+  return observations;
 }
 
 const controls: readonly ControlCheck[] = [
@@ -144,14 +154,16 @@ function control(controlId: string, sourceCheck: SourceCheck): ControlCheck {
 }
 
 /** Create one control observation while retaining separate evidence for independent source checks. */
-function createObservation(
+async function createObservationAsync(
   controlCheck: ControlCheck,
   input: CollectorInput,
-): SecurityAuditObservation {
-  const sourceResults = controlCheck.sources.map((sourceCheck) => ({
-    sourceCheck,
-    result: runCommandSafely(input.runner, sourceCheck),
-  }));
+): Promise<SecurityAuditObservation> {
+  const sourceResults = await Promise.all(
+    controlCheck.sources.map(async (sourceCheck) => ({
+      sourceCheck,
+      result: await runCommandSafelyAsync(input.runner, sourceCheck, input.signal),
+    })),
+  );
   const evidence = sourceResults.flatMap(({ sourceCheck, result }) =>
     createEvidence(sourceCheck, result, controlCheck.controlId, input),
   );
@@ -168,12 +180,14 @@ function createObservation(
 }
 
 /** Run one fixed local command without allowing process failures to escape the collector boundary. */
-function runCommandSafely(
+async function runCommandSafelyAsync(
   runner: MacosSecurityAuditCommandRunner,
   sourceCheck: SourceCheck,
-): MacosSecurityAuditCommandResult {
+  signal: AbortSignal | undefined,
+): Promise<MacosSecurityAuditCommandResult> {
+  if (signal?.aborted) return { kind: 'timed-out' };
   try {
-    return runner.run(sourceCheck.executable, sourceCheck.arguments_);
+    return await runner.runAsync(sourceCheck.executable, sourceCheck.arguments_, { signal });
   } catch {
     return { kind: 'failed' };
   }
