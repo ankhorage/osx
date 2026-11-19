@@ -71,11 +71,11 @@ function validatedEvidence(
     return createUnknownResult(control, 'unsupported', 'missing-evidence', baseline);
   if (!isRecord(observation))
     return createUnknownResult(control, 'supported', 'invalid-evidence', baseline);
-  const inaccessibleAccess = getSecurityAuditAccessResult(observation);
-  if (inaccessibleAccess)
-    return createUnknownResult(control, inaccessibleAccess[0], inaccessibleAccess[1], baseline);
+  const access = getSecurityAuditAccessResult(observation);
+  if (access?.[0] === 'permission-blocked')
+    return createUnknownResult(control, access[0], access[1], baseline);
   if (
-    !hasMetadataValue(observation, 'access', 'available') ||
+    !hasSupportedAccess(observation) ||
     !validateSecurityAuditApplicability(observation) ||
     !Array.isArray(observation.evidence)
   )
@@ -84,8 +84,19 @@ function validatedEvidence(
   if (!evidence || !hasValidEvidence(evidence, control, profile, baseline))
     return createUnknownResult(control, 'supported', 'invalid-evidence', baseline);
   if (evidence.length === 0)
-    return createUnknownResult(control, 'supported', 'missing-evidence', baseline);
+    return access
+      ? createUnknownResult(control, access[0], access[1], baseline)
+      : createUnknownResult(control, 'supported', 'missing-evidence', baseline);
+  if (access) return createUnknownResult(control, access[0], access[1], baseline, evidence);
   return evidence;
+}
+/** Accept only access states that the engine can classify after validating the accompanying evidence. */
+function hasSupportedAccess(value: object): boolean {
+  return (
+    hasMetadataValue(value, 'access', 'available') ||
+    hasMetadataValue(value, 'access', 'incomplete') ||
+    hasMetadataValue(value, 'access', 'permission-blocked')
+  );
 }
 /** Group untrusted collector records without allowing malformed or duplicate JSON to abort the report. */
 function collectObservationsByControlId(

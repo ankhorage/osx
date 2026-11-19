@@ -3,18 +3,22 @@ import type {
   SecurityAuditObservation,
   SecurityAuditProfile,
 } from '../../../../types/securityAudit.js';
+import {
+  collectMacosPhysicalAndLinkSourcesAsync,
+  type InterfaceStatusInventory,
+  type LinkSources,
+  type PhysicalSources,
+} from './collectMacosPhysicalAndLinkSourcesAsync.js';
 import type {
   MacosSecurityAuditCommandResult as CommandResult,
   MacosSecurityAuditCommandRunner,
 } from './createMacosSecurityAuditCommandRunner.js';
 
-const maximumInterfaceStatusProbes = 4;
-const interfaceStatusProbeTimeoutMilliseconds = 1_000;
-
 interface CollectorInput {
   readonly runner: MacosSecurityAuditCommandRunner;
   readonly profile: SecurityAuditProfile;
   readonly collectedAt: string;
+  readonly controlIds?: ReadonlySet<string>;
   readonly signal?: AbortSignal;
 }
 
@@ -23,65 +27,25 @@ export async function collectMacosPhysicalAndLinkObservationsAsync(
   input: CollectorInput,
 ): Promise<readonly SecurityAuditObservation[]> {
   if (input.runner.platform !== 'darwin') return unsupportedPlatformObservations(input);
-  const sources = await collectSourcesAsync(input.runner, input.signal);
-  return [physicalObservation(input, sources), linkObservation(input, sources)];
-}
-
-interface MacosPhysicalAndLinkSources {
-  readonly hardwarePorts: CommandResult;
-  readonly interfaces: CommandResult;
-  readonly interfaceStatusInventory: InterfaceStatusInventory;
-  readonly deviceInventory: CommandResult;
-  readonly airportMetadata: CommandResult;
-  readonly neighbors: CommandResult;
-}
-
-interface InterfaceStatusInventory {
-  readonly results: readonly CommandResult[];
-  readonly truncated: boolean;
-  readonly parseFailed: boolean;
-}
-
-/*** Query only public, local macOS inspection commands through the injected outer boundary. */
-async function collectSourcesAsync(
-  runner: MacosSecurityAuditCommandRunner,
-  signal: AbortSignal | undefined,
-): Promise<MacosPhysicalAndLinkSources> {
-  const hardwarePorts = await runCommandAsync(
-    runner,
-    '/usr/sbin/networksetup',
-    ['-listallhardwareports'],
-    signal,
+  const physical = includesControl(input, 'osi1-physical-interface-inventory');
+  const link = includesControl(input, 'osi2-link-security');
+  if (!physical && !link) return [];
+  const sources = await collectMacosPhysicalAndLinkSourcesAsync(
+    input.runner,
+    physical,
+    link,
+    input.signal,
   );
-  const interfaces = await runCommandAsync(runner, '/sbin/ifconfig', ['-l'], signal);
-  const interfaceStatusInventory = await interfaceStatusResultsAsync(runner, interfaces, signal);
-  const deviceInventory = await runCommandAsync(
-    runner,
-    '/usr/sbin/system_profiler',
-    ['SPUSBDataType', 'SPThunderboltDataType', 'SPBluetoothDataType', '-json'],
-    signal,
-  );
-  const airportMetadata = await runCommandAsync(
-    runner,
-    '/usr/sbin/system_profiler',
-    ['SPAirPortDataType', '-json'],
-    signal,
-  );
-  const neighbors = await runCommandAsync(runner, '/usr/sbin/arp', ['-an'], signal);
-  return {
-    hardwarePorts,
-    interfaces,
-    interfaceStatusInventory,
-    deviceInventory,
-    airportMetadata,
-    neighbors,
-  };
+  return [
+    ...(sources.physical ? [physicalObservation(input, sources.physical)] : []),
+    ...(sources.link ? [linkObservation(input, sources.link)] : []),
+  ];
 }
 
 /*** Report the observable L1 boundary while keeping physical controls explicitly manual and unknown. */
 function physicalObservation(
   input: CollectorInput,
-  sources: MacosPhysicalAndLinkSources,
+  sources: PhysicalSources,
 ): SecurityAuditObservation {
   return observation(
     'osi1-physical-interface-inventory',
@@ -114,10 +78,7 @@ function physicalObservation(
 }
 
 /*** Report the observable L2 boundary without inferring wireless or neighbor-cache security from metadata. */
-function linkObservation(
-  input: CollectorInput,
-  sources: MacosPhysicalAndLinkSources,
-): SecurityAuditObservation {
+function linkObservation(input: CollectorInput, sources: LinkSources): SecurityAuditObservation {
   return observation(
     'osi2-link-security',
     'unknown',
@@ -160,65 +121,24 @@ function linkObservation(
 function unsupportedPlatformObservations(
   input: CollectorInput,
 ): readonly SecurityAuditObservation[] {
-  return ['osi1-physical-interface-inventory', 'osi2-link-security'].map((controlId) =>
-    observation(controlId, 'not-applicable', 'available', [
-      evidence(
-        input,
-        controlId,
-        'platform',
-        'macOS-only passive collector is not applicable on this platform.',
-        [['macos-host', false]],
-      ),
-    ]),
-  );
-}
-
-/*** Query link state only for kernel-reported interface names and retain no interface names in evidence. */
-async function interfaceStatusResultsAsync(
-  runner: MacosSecurityAuditCommandRunner,
-  interfaces: CommandResult,
-  signal: AbortSignal | undefined,
-): Promise<InterfaceStatusInventory> {
-  if (interfaces.kind !== 'available') return { results: [], truncated: false, parseFailed: false };
-  const names = interfaces.stdout
-    .trim()
-    .split(/\s+/)
-    .filter((name) => /^[a-z]+\d+$/.test(name))
-    .sort();
-  const uniqueNames = [...new Set(names)];
-  return {
-    results: await Promise.all(
-      uniqueNames
-        .slice(0, maximumInterfaceStatusProbes)
-        .map((name) =>
-          runCommandAsync(
-            runner,
-            '/sbin/ifconfig',
-            [name],
-            signal,
-            interfaceStatusProbeTimeoutMilliseconds,
-          ),
+  return ['osi1-physical-interface-inventory', 'osi2-link-security']
+    .filter((controlId) => includesControl(input, controlId))
+    .map((controlId) =>
+      observation(controlId, 'not-applicable', 'available', [
+        evidence(
+          input,
+          controlId,
+          'platform',
+          'macOS-only passive collector is not applicable on this platform.',
+          [['macos-host', false]],
         ),
-    ),
-    truncated: uniqueNames.length > maximumInterfaceStatusProbes,
-    parseFailed: interfaces.stdout.trim().length > 0 && uniqueNames.length === 0,
-  };
+      ]),
+    );
 }
 
-/*** Avoid starting another local command after the audit deadline has cancelled this collector. */
-async function runCommandAsync(
-  runner: MacosSecurityAuditCommandRunner,
-  command: string,
-  arguments_: readonly string[],
-  signal: AbortSignal | undefined,
-  timeoutMilliseconds?: number,
-): Promise<CommandResult> {
-  if (signal?.aborted) return { kind: 'timed-out' };
-  try {
-    return await runner.runAsync(command, arguments_, { signal, timeoutMilliseconds });
-  } catch {
-    return { kind: 'failed' };
-  }
+/** Treat an omitted scope as the public collector's complete L1/L2 request. */
+function includesControl(input: CollectorInput, controlId: string): boolean {
+  return input.controlIds?.has(controlId) ?? true;
 }
 
 /*** Preserve source failure categories while exposing only redacted aggregate facts. */

@@ -4,6 +4,9 @@ import { audit } from '../src/cli/commands/security/audit.js';
 import {
   createDefaultSecurityAuditReport,
   createMacosSecurityAuditReportAsync,
+  createSecurityAuditCatalog,
+  createSecurityAuditProfile,
+  runSecurityAudit,
 } from '../src/index.js';
 
 test('guided audit calls injected collection only after confirmation and never after skip or abort', async () => {
@@ -40,6 +43,35 @@ test('a terminal-less guided request does not invoke a report or host collector'
   });
   expect(result.exitCode).toBe(1);
   expect(called).toBe(false);
+});
+
+test('non-interactive JSON retains validated partial L3 measurements without claiming a pass', async () => {
+  const output: string[] = [];
+  const result = await audit(
+    {
+      argv: ['--layer', '3', '--non-interactive', '--json'],
+      context: {
+        writeStdout: (value) => output.push(value),
+        writeStderr: () => undefined,
+      },
+    },
+    { createReportAsync: async () => partialLayer3Report() },
+  );
+  const report = JSON.parse(output.join('')) as {
+    readonly results: readonly {
+      readonly outcome: string;
+      readonly coverage: string;
+      readonly evidence: readonly { readonly facts: readonly { readonly id: string }[] }[];
+    }[];
+  };
+
+  expect(result.exitCode).toBe(0);
+  expect(report.results).toHaveLength(1);
+  expect(report.results[0]).toMatchObject({
+    outcome: 'unknown',
+    coverage: 'incomplete',
+    evidence: [{ facts: [{ id: 'ipv4-forwarding-disabled' }] }],
+  });
 });
 
 test('scoped composition calls only the matching injected collectors and retains actual evidence', async () => {
@@ -153,6 +185,31 @@ function selectedReport(controlIds: ReadonlySet<string>) {
     ...report,
     results: report.results.filter((result) => controlIds.has(result.control.id)),
   };
+}
+
+/** Build engine-validated partial evidence so the CLI test cannot manufacture an evaluated outcome. */
+function partialLayer3Report() {
+  const profile = createSecurityAuditProfile();
+  return runSecurityAudit(createSecurityAuditCatalog(), profile, [
+    {
+      controlId: 'osi3-routing-and-filtering',
+      applicability: 'unknown',
+      access: 'incomplete',
+      evidence: [
+        {
+          id: 'layer3-forwarding-summary',
+          controlId: 'osi3-routing-and-filtering',
+          profileId: profile.id,
+          baselineVersion: profile.baseline,
+          kind: 'macos-passive-network-summary',
+          summary: 'Redacted forwarding metadata was observed locally.',
+          collectedAt: '2026-11-18T00:00:00.000Z',
+          redacted: true,
+          facts: [{ id: 'ipv4-forwarding-disabled', value: true }],
+        },
+      ],
+    },
+  ]);
 }
 
 /** Resolve only when the composition-wide abort reaches the injected collector. */

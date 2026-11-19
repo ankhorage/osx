@@ -140,6 +140,47 @@ test('does not execute macOS commands or imply support on another platform', asy
   expect(observations.every((observation) => observation.access === 'available')).toBe(true);
 });
 
+test('executes only L1 or L2 command sources selected at the command runner boundary', async () => {
+  const l1Calls: string[] = [];
+  const l2Calls: string[] = [];
+  await collectMacosPhysicalAndLinkObservationsAsync({
+    profile,
+    collectedAt,
+    controlIds: new Set(['osi1-physical-interface-inventory']),
+    runner: countingRunner(l1Calls),
+  });
+  await collectMacosPhysicalAndLinkObservationsAsync({
+    profile,
+    collectedAt,
+    controlIds: new Set(['osi2-link-security']),
+    runner: countingRunner(l2Calls),
+  });
+
+  expect(l1Calls).toContain('/usr/sbin/networksetup -listallhardwareports');
+  expect(l1Calls).not.toContain('/usr/sbin/system_profiler SPAirPortDataType -json');
+  expect(l1Calls).not.toContain('/usr/sbin/arp -an');
+  expect(l2Calls).not.toContain('/usr/sbin/networksetup -listallhardwareports');
+  expect(l2Calls).toContain('/usr/sbin/system_profiler SPAirPortDataType -json');
+  expect(l2Calls).toContain('/usr/sbin/arp -an');
+  expect(l1Calls.filter((call) => call === '/sbin/ifconfig -l')).toHaveLength(1);
+  expect(l2Calls.filter((call) => call === '/sbin/ifconfig -l')).toHaveLength(1);
+});
+
+/** Count actual command invocations while supplying only redacted fixture output. */
+function countingRunner(calls: string[]) {
+  return {
+    platform: 'darwin' as const,
+    async runAsync(command: string, arguments_: readonly string[]) {
+      calls.push([command, ...arguments_].join(' '));
+      if (command === '/sbin/ifconfig' && arguments_[0] === '-l')
+        return { kind: 'available' as const, stdout: 'en0' };
+      if (command === '/usr/sbin/system_profiler')
+        return { kind: 'available' as const, stdout: '{}' };
+      return { kind: 'available' as const, stdout: '' };
+    },
+  };
+}
+
 /** Create a deterministic, process-free macOS command fixture for collector behavior. */
 function fixtureRunner(
   outputs: Readonly<

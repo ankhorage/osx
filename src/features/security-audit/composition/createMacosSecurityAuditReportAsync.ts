@@ -116,6 +116,7 @@ async function collectPhysicalAndLinkAsync(
     runner,
     profile,
     collectedAt,
+    controlIds: new Set(controls.map((control) => control.id)),
     signal,
   });
 }

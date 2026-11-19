@@ -148,12 +148,67 @@ test('missing, blocked, contradictory, and unknown applicability evidence fail c
     evidence: [],
   });
   expect(blocked.baseline.status).toBe('inaccessible-evidence');
-  expect(incomplete).toMatchObject({ outcome: 'unknown', coverage: 'incomplete', evidence: [] });
+  expect(incomplete).toMatchObject({ outcome: 'unknown', coverage: 'incomplete' });
   expect(incomplete.baseline.status).toBe('incomplete-evidence');
+  expect(incomplete.evidence).toEqual([evidence()]);
   expect(contradictory).toMatchObject({ outcome: 'unknown', coverage: 'implemented' });
   expect(contradictory.baseline.status).toBe('contradictory-evidence');
   expect(unknownApplicability).toMatchObject({ outcome: 'unknown', coverage: 'implemented' });
   expect(unknownApplicability.baseline.status).toBe('applicability-unknown');
+});
+
+test('validated partial L3/L4 and SIP observations retain evidence without evaluating a baseline', () => {
+  const network = findControl(
+    runSecurityAudit(controlsWithPredicate(), profile, [
+      observation({ access: 'incomplete', evidence: [evidence()] }),
+    ]),
+    controlId,
+  );
+  const sip = findControl(
+    runSecurityAudit(createSecurityAuditCatalog(), profile, [
+      {
+        controlId: 'cross-layer-hardware-startup-trust',
+        applicability: 'unknown',
+        access: 'incomplete',
+        evidence: [
+          {
+            ...evidence(),
+            id: 'sip-summary',
+            controlId: 'cross-layer-hardware-startup-trust',
+            facts: [{ id: 'system-integrity-protection-enabled', value: true }],
+          },
+        ],
+      },
+    ]),
+    'cross-layer-hardware-startup-trust',
+  );
+
+  for (const result of [network, sip]) {
+    expect(result).toMatchObject({ outcome: 'unknown', coverage: 'incomplete' });
+    expect(result.baseline.status).toBe('incomplete-evidence');
+    expect(result.evidence).toHaveLength(1);
+  }
+});
+
+test('partial observations still discard unredacted or invalid facts', () => {
+  const results = [
+    observation({ access: 'incomplete', evidence: [untypedEvidence({ redacted: false })] }),
+    observation({
+      access: 'incomplete',
+      evidence: [
+        untypedEvidence({
+          facts: [{ id: 'no-non-loopback-tcp-listeners', value: 'true' }],
+        }),
+      ],
+    }),
+  ].map((item) =>
+    findControl(runSecurityAudit(controlsWithPredicate(), profile, [item]), controlId),
+  );
+
+  for (const result of results) {
+    expect(result).toMatchObject({ outcome: 'unknown', coverage: 'supported', evidence: [] });
+    expect(result.baseline.status).toBe('invalid-evidence');
+  }
 });
 
 test('invalid evidence metadata and sensitive summaries cannot reach a passing result', () => {
