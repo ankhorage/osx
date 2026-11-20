@@ -2,6 +2,7 @@ import type {
   SecurityAuditEvidence,
   SecurityAuditObservation,
   SecurityAuditProfile,
+  SecurityAuditSourceProvenance,
 } from '../../../../types/securityAudit.js';
 import type {
   MacosSecurityAuditCommandResult,
@@ -167,6 +168,9 @@ async function createObservationAsync(
   const evidence = sourceResults.flatMap(({ sourceCheck, result }) =>
     createEvidence(sourceCheck, result, controlCheck.controlId, input),
   );
+  const sources = sourceResults.map(({ sourceCheck, result }) =>
+    createSourceProvenance(sourceCheck, result, evidence),
+  );
   const access = sourceAccess(sourceResults.map(({ result }) => result));
   return {
     controlId: controlCheck.controlId,
@@ -176,6 +180,7 @@ async function createObservationAsync(
         : 'unknown',
     access,
     evidence,
+    sources,
   };
 }
 
@@ -214,7 +219,7 @@ function createEvidence(
   return [
     {
       id: sourceCheck.evidenceId,
-      sourceId: sourceCheck.kind,
+      sourceId: sourceIdFor(sourceCheck),
       controlId,
       profileId: input.profile.id,
       baselineVersion: input.profile.baseline,
@@ -249,7 +254,38 @@ function unsupportedPlatformObservations(
         facts: [{ id: 'macos-host', value: false }],
       },
     ],
+    sources: [{ id: 'platform:macos', state: 'unsupported', evidenceIds: ['platform'] }],
   }));
+}
+
+/** Capture the command result at this adapter edge, including a parse failure without raw output. */
+function createSourceProvenance(
+  sourceCheck: SourceCheck,
+  result: MacosSecurityAuditCommandResult,
+  evidence: readonly SecurityAuditEvidence[],
+): SecurityAuditSourceProvenance {
+  const evidenceIds = evidence
+    .filter((item) => item.sourceId === sourceIdFor(sourceCheck))
+    .map((item) => item.id);
+  return {
+    id: sourceIdFor(sourceCheck),
+    state: evidenceIds.length > 0 ? 'completed' : sourceState(result),
+    evidenceIds,
+  };
+}
+/** Keep source IDs namespaced and independent from command paths or host values. */
+function sourceIdFor(sourceCheck: SourceCheck): string {
+  return `macos-host:${sourceCheck.kind}`;
+}
+/** Preserve command outcomes conservatively; unknown adapter failures remain unclassified. */
+function sourceState(
+  result: MacosSecurityAuditCommandResult,
+): SecurityAuditSourceProvenance['state'] {
+  if (result.kind === 'available') return 'parse-invalid';
+  if (result.kind === 'permission-denied') return 'permission-blocked';
+  if (result.kind === 'missing') return 'missing';
+  if (result.kind === 'timed-out') return 'timed-out';
+  return 'failed';
 }
 
 /** Parse an explicit Time Machine destination state without inferring encryption or recovery. */

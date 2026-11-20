@@ -27,10 +27,22 @@ export function createSecurityObservation(
     redacted: true,
     facts,
   };
-  return { controlId, applicability, access: 'available', evidence: [evidence] };
+  return {
+    controlId,
+    applicability,
+    access: 'available',
+    evidence: [evidence],
+    sources: [
+      {
+        id: `macos-posture:${controlId}`,
+        state: 'completed',
+        evidenceIds: [evidence.id],
+      },
+    ],
+  };
 }
 
 /*** Represent absent, denied, or unsupported host evidence without manufacturing a security conclusion. */
 export function createUnknownSecurityObservation(controlId: string): SecurityAuditObservation {
-  return { controlId, applicability: 'unknown', access: 'available', evidence: [] };
+  return { controlId, applicability: 'unknown', access: 'available', evidence: [], sources: [] };
 }

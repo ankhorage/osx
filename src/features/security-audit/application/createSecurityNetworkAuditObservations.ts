@@ -2,6 +2,7 @@ import type {
   SecurityAuditEvidence,
   SecurityAuditObservation,
   SecurityAuditProfile,
+  SecurityAuditSourceProvenance,
 } from '../../../types/securityAudit.js';
 import type {
   SecurityNetworkEvidence,
@@ -137,7 +138,54 @@ function observation(
     access,
     evidence:
       facts.length === 0 ? [] : [createEvidence(controlId, profile, collectedAt, facts, summary)],
+    sources: createSources(controlId, availability, facts.length > 0),
   };
+}
+/** Capture every fixed L3/L4 command result independently instead of deriving it from control coverage. */
+function createSources(
+  controlId: string,
+  availability: readonly SecurityNetworkEvidenceAvailability[],
+  hasEvidence: boolean,
+): readonly SecurityAuditSourceProvenance[] {
+  const names =
+    controlId === 'osi3-routing-and-filtering'
+      ? [
+          'interfaces',
+          'ipv4-routes',
+          'ipv6-routes',
+          'ipv4-forwarding',
+          'ipv6-forwarding',
+          'vpn-services',
+          'network-extensions',
+          'pf-status',
+          'pf-rules',
+          'pf-anchors',
+        ]
+      : ['tcp-listeners', 'udp-bindings', 'alf-global-state', 'alf-stealth-mode'];
+  const aggregateId = `macos-network:${controlId}`;
+  return [
+    ...availability.map((item, index) => ({
+      id: `macos-network:${names.at(index) ?? 'unclassified'}`,
+      state: sourceState(item),
+      evidenceIds: [],
+    })),
+    {
+      id: aggregateId,
+      state: hasEvidence ? ('completed' as const) : ('unclassified' as const),
+      evidenceIds: hasEvidence ? [`${controlId}-network-summary`] : [],
+    },
+  ];
+}
+/** Translate provider availability faithfully; a provider-specific unknown remains unclassified. */
+function sourceState(
+  availability: SecurityNetworkEvidenceAvailability,
+): SecurityAuditSourceProvenance['state'] {
+  if (availability === 'available') return 'completed';
+  if (availability === 'permission-denied') return 'permission-blocked';
+  if (availability === 'timeout') return 'timed-out';
+  if (availability === 'unsupported') return 'unsupported';
+  if (availability === 'failed') return 'failed';
+  return 'unclassified';
 }
 
 /** Attribute collected facts to the network adapter and active profile without copying raw command output. */

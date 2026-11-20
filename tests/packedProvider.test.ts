@@ -229,13 +229,14 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
 /** Persist only the package-produced redacted manifest when native CI explicitly requests it. */
 async function writeNativeAuditManifestAsync(
   report: { readonly manifest?: unknown },
-  packageApi: { readonly createSecurityAuditManifest?: unknown },
+  packageApi: { readonly createSecurityAuditManifest?: unknown; readonly version?: unknown },
 ): Promise<void> {
   const destination = process.env.ANKH_NATIVE_SECURITY_AUDIT_MANIFEST;
   if (!destination) return;
   expect(process.platform).toBe('darwin');
   expect(packageApi.createSecurityAuditManifest).toBeFunction();
   const manifest = report.manifest as {
+    readonly schemaVersion: number;
     readonly controls: readonly {
       readonly evidenceIds: readonly string[];
       readonly sources: readonly unknown[];
@@ -245,8 +246,16 @@ async function writeNativeAuditManifestAsync(
   const serialized = JSON.stringify(
     {
       validation: {
-        gitSha: process.env.GITHUB_SHA ?? 'local-native-acceptance',
-        platform: process.platform,
+        prHeadSha: process.env.ANKH_PR_HEAD_SHA ?? 'local-native-acceptance',
+        testedMergeSha:
+          process.env.ANKH_TESTED_MERGE_SHA ?? process.env.GITHUB_SHA ?? 'local-native-acceptance',
+        schemaVersion: manifest.schemaVersion,
+        toolVersion:
+          typeof packageApi.version === 'string' ? packageApi.version : 'packed-provider',
+        runner: {
+          os: process.env.ANKH_RUNNER_OS ?? process.platform,
+          architecture: process.env.ANKH_RUNNER_ARCH ?? process.arch,
+        },
         validationMode: 'packed-provider-native-security-audit',
         recordCount: manifest.controls.length,
         generatedAt: new Date().toISOString(),

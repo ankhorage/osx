@@ -146,6 +146,8 @@ export interface SecurityAuditObservation {
   readonly applicability: SecurityAuditApplicability;
   readonly access: 'available' | 'incomplete' | 'permission-blocked';
   readonly evidence: readonly SecurityAuditEvidence[];
+  /** Source outcomes captured by the owning collector adapter, never inferred from control coverage. */
+  readonly sources?: readonly SecurityAuditSourceProvenance[];
 }
 
 /** Explain the engine-owned evidence decision behind a result. */
@@ -172,6 +174,7 @@ export interface SecurityAuditResult {
   readonly severity: SecurityAuditSeverity;
   readonly confidence: SecurityAuditConfidence;
   readonly evidence: readonly SecurityAuditEvidence[];
+  readonly sources: readonly SecurityAuditSourceProvenance[];
   readonly recommendation: SecurityAuditRecommendation;
   readonly baseline: SecurityAuditBaselineEvaluation;
 }

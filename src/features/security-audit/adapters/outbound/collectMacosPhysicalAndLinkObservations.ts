@@ -242,5 +242,15 @@ function observation(
   access: SecurityAuditObservation['access'],
   evidenceItems: readonly SecurityAuditEvidence[],
 ): SecurityAuditObservation {
-  return { controlId, applicability, access, evidence: evidenceItems };
+  return {
+    controlId,
+    applicability,
+    access,
+    evidence: evidenceItems,
+    sources: evidenceItems.map((item) => ({
+      id: item.sourceId ?? 'macos-passive:unclassified',
+      state: 'completed' as const,
+      evidenceIds: [item.id],
+    })),
+  };
 }

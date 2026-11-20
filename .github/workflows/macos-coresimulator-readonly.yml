@@ -40,6 +40,10 @@ jobs:
         env:
           ANKH_NATIVE_CORESIMULATOR_ACCEPTANCE: '1'
           ANKH_NATIVE_SECURITY_AUDIT_MANIFEST: security-audit-artifact/audit-manifest.json
+          ANKH_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ANKH_TESTED_MERGE_SHA: ${{ github.sha }}
+          ANKH_RUNNER_OS: ${{ runner.os }}
+          ANKH_RUNNER_ARCH: ${{ runner.arch }}
         run: |
           mkdir -p security-audit-artifact
           bun test --timeout 120000 tests/packedProvider.test.ts
