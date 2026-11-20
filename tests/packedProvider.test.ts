@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -145,6 +145,7 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
         readonly outcome: string;
         readonly evidence: readonly unknown[];
       }[];
+      readonly manifest?: unknown;
     };
     expect(auditReport.results).toHaveLength(17);
     expect(
@@ -152,6 +153,7 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
         (result) => result.outcome !== 'pass' || result.evidence.length > 0,
       ),
     ).toBe(true);
+    await writeNativeAuditManifestAsync(auditReport, packageApi);
     output.length = 0;
     const layerAudit = await runCli(
       ['osx', 'security', 'audit', '--layer', '4', '--non-interactive', '--json'],
@@ -223,3 +225,48 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     await rm(temp, { recursive: true, force: true });
   }
 }, 120_000);
+
+/** Persist only the package-produced redacted manifest when native CI explicitly requests it. */
+async function writeNativeAuditManifestAsync(
+  report: { readonly manifest?: unknown },
+  packageApi: { readonly createSecurityAuditManifest?: unknown; readonly version?: unknown },
+): Promise<void> {
+  const destination = process.env.ANKH_NATIVE_SECURITY_AUDIT_MANIFEST;
+  if (!destination) return;
+  expect(process.platform).toBe('darwin');
+  expect(packageApi.createSecurityAuditManifest).toBeFunction();
+  const manifest = report.manifest as {
+    readonly schemaVersion: number;
+    readonly controls: readonly {
+      readonly evidenceIds: readonly string[];
+      readonly sources: readonly unknown[];
+    }[];
+  };
+  expect(manifest.controls).toHaveLength(17);
+  const serialized = JSON.stringify(
+    {
+      validation: {
+        prHeadSha: process.env.ANKH_PR_HEAD_SHA ?? 'local-native-acceptance',
+        testedMergeSha:
+          process.env.ANKH_TESTED_MERGE_SHA ?? process.env.GITHUB_SHA ?? 'local-native-acceptance',
+        schemaVersion: manifest.schemaVersion,
+        toolVersion:
+          typeof packageApi.version === 'string' ? packageApi.version : 'packed-provider',
+        runner: {
+          os: process.env.ANKH_RUNNER_OS ?? process.platform,
+          architecture: process.env.ANKH_RUNNER_ARCH ?? process.arch,
+        },
+        validationMode: 'packed-provider-native-security-audit',
+        recordCount: manifest.controls.length,
+        generatedAt: new Date().toISOString(),
+      },
+      manifest,
+    },
+    null,
+    2,
+  );
+  expect(serialized).not.toMatch(
+    /-----BEGIN|\/Users\/|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b/i,
+  );
+  await writeFile(destination, `${serialized}\n`, 'utf8');
+}

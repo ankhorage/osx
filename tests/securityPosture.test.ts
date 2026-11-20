@@ -239,18 +239,21 @@ test('each collector is unknown when all read-only sources are unavailable', asy
       applicability: 'unknown',
       access: 'available',
       evidence: [],
+      sources: [],
     },
     {
       controlId: 'osi6-presentation-trust',
       applicability: 'unknown',
       access: 'available',
       evidence: [],
+      sources: [],
     },
     {
       controlId: 'osi7-application-network-and-persistence',
       applicability: 'unknown',
       access: 'available',
       evidence: [],
+      sources: [],
     },
   ]);
 });

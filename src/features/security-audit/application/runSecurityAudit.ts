@@ -15,7 +15,9 @@ import {
   validateSecurityAuditApplicability,
   validateSecurityAuditPolicy,
 } from '../domain/validateSecurityAuditPolicy.js';
+import { validateSecurityAuditSources } from '../domain/validateSecurityAuditSources.js';
 import { createSecurityAuditBaselineEvaluation } from './createSecurityAuditBaselineEvaluation.js';
+import { createSecurityAuditManifest } from './createSecurityAuditManifest.js';
 import { getSecurityAuditAccessResult } from './getSecurityAuditAccessResult.js';
 /*** Evaluate read-only observations from their validated evidence and the selected control baseline. */
 export function runSecurityAudit(
@@ -31,12 +33,14 @@ export function runSecurityAudit(
   const observationsByControlId = collectObservationsByControlId(controlsById, observations);
   const results = controls
     .map((control) => createResult(control, profile, observationsByControlId.get(control.id)))
+    .map((result) => withValidatedSources(result, observationsByControlId.get(result.control.id)))
     .sort((left, right) => left.control.id.localeCompare(right.control.id));
   return {
     schemaVersion: 1,
     profile,
     results,
     coverage: createSecurityAuditCoverageMatrix(results),
+    manifest: createSecurityAuditManifest(profile, results),
   };
 }
 
@@ -75,7 +79,9 @@ function validatedEvidence(
   if (access?.[0] === 'permission-blocked')
     return createUnknownResult(control, access[0], access[1], baseline);
   if (
-    !hasSupportedAccess(observation) ||
+    !(['available', 'incomplete', 'permission-blocked'] as const).some((access) =>
+      hasMetadataValue(observation, 'access', access),
+    ) ||
     !validateSecurityAuditApplicability(observation) ||
     !Array.isArray(observation.evidence)
   )
@@ -90,15 +96,6 @@ function validatedEvidence(
   if (access) return createUnknownResult(control, access[0], access[1], baseline, evidence);
   return evidence;
 }
-/** Accept only access states that the engine can classify after validating the accompanying evidence. */
-function hasSupportedAccess(value: object): boolean {
-  return (
-    hasMetadataValue(value, 'access', 'available') ||
-    hasMetadataValue(value, 'access', 'incomplete') ||
-    hasMetadataValue(value, 'access', 'permission-blocked')
-  );
-}
-/** Group untrusted collector records without allowing malformed or duplicate JSON to abort the report. */
 function collectObservationsByControlId(
   controlsById: ReadonlySet<string>,
   observations: unknown,
@@ -116,7 +113,6 @@ function collectObservationsByControlId(
     return new Map([...collected, [observation.controlId, observation]]);
   }, new Map());
 }
-/** Sort only validated evidence so malformed JSON is never echoed into a report. */
 function sortEvidence(value: readonly unknown[]): readonly SecurityAuditEvidence[] | undefined {
   if (!value.every(isRecord)) return undefined;
   if (!value.every((item) => typeof item.id === 'string')) return undefined;
@@ -124,7 +120,6 @@ function sortEvidence(value: readonly unknown[]): readonly SecurityAuditEvidence
     left.id.localeCompare(right.id),
   );
 }
-/** Reject incomplete, misattributed, unredacted, stale-format, or potentially sensitive evidence. */
 function hasValidEvidence(
   evidence: readonly SecurityAuditEvidence[],
   control: SecurityAuditControl,
@@ -142,15 +137,21 @@ function hasValidEvidence(
       item.profileId === profile.id &&
       item.baselineVersion === profile.baseline &&
       hasMetadataValue(item, 'redacted', true) &&
-      hasValidFacts(item.facts, baseline) &&
+      validateSecurityAuditFacts(item.facts, baseline?.predicate) &&
       isTimestamp(item.collectedAt) &&
       !containsSensitiveContent(item.summary),
   );
   return evidenceIds.size === evidence.length && evidenceIsValid;
 }
-/** Validate evidence facts independently from an optional policy predicate. */
-function hasValidFacts(facts: unknown, baseline: SecurityAuditBaseline | undefined): boolean {
-  return validateSecurityAuditFacts(facts, baseline?.predicate);
+/** Retain only complete, safe, bidirectional provenance captured by the collector boundary. */
+function withValidatedSources(
+  result: SecurityAuditResult,
+  observation: unknown,
+): SecurityAuditResult {
+  const sources = validateSecurityAuditSources(observation, result.evidence);
+  return sources === undefined
+    ? createUnknownResult(result.control, 'supported', 'invalid-evidence')
+    : { ...result, sources };
 }
 /** Read untrusted runtime metadata without relying on TypeScript's compile-time literal narrowing. */
 function hasMetadataValue(
@@ -245,6 +246,7 @@ function createUnknownResult(
     severity: 'info',
     confidence: 'none',
     evidence,
+    sources: [],
     recommendation: control.recommendation,
     baseline: createSecurityAuditBaselineEvaluation(baseline, status, evidence),
   };
@@ -264,6 +266,7 @@ function createNotApplicableResult(
     severity: 'info',
     confidence: confidenceFor(evidence),
     evidence,
+    sources: [],
     recommendation: control.recommendation,
     baseline: createSecurityAuditBaselineEvaluation(baseline, 'verified', evidence),
   };
@@ -283,6 +286,7 @@ function createPassedResult(
     severity: 'info',
     confidence: confidenceFor(evidence),
     evidence,
+    sources: [],
     recommendation: control.recommendation,
     baseline: createSecurityAuditBaselineEvaluation(baseline, 'verified', evidence),
   };
@@ -301,6 +305,7 @@ function createPassedResult(
     severity: baseline.failureSeverity,
     confidence: confidenceFor(evidence),
     evidence,
+    sources: [],
     recommendation: control.recommendation,
     baseline: createSecurityAuditBaselineEvaluation(baseline, 'verified', evidence),
   };
