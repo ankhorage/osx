@@ -187,6 +187,7 @@ function evidence(
 ): SecurityAuditEvidence {
   return {
     id,
+    sourceId: `macos-passive:${id}`,
     controlId,
     profileId: input.profile.id,
     baselineVersion: input.profile.baseline,

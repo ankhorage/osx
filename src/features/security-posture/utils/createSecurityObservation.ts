@@ -17,6 +17,7 @@ export function createSecurityObservation(
 ): SecurityAuditObservation {
   const evidence: SecurityAuditEvidence = {
     id: `${controlId}-metadata`,
+    sourceId: `macos-posture:${controlId}`,
     controlId,
     profileId: profile.id,
     baselineVersion: profile.baseline,

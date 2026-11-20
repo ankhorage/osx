@@ -16,6 +16,7 @@ import {
   validateSecurityAuditPolicy,
 } from '../domain/validateSecurityAuditPolicy.js';
 import { createSecurityAuditBaselineEvaluation } from './createSecurityAuditBaselineEvaluation.js';
+import { createSecurityAuditManifest } from './createSecurityAuditManifest.js';
 import { getSecurityAuditAccessResult } from './getSecurityAuditAccessResult.js';
 /*** Evaluate read-only observations from their validated evidence and the selected control baseline. */
 export function runSecurityAudit(
@@ -37,6 +38,7 @@ export function runSecurityAudit(
     profile,
     results,
     coverage: createSecurityAuditCoverageMatrix(results),
+    manifest: createSecurityAuditManifest(profile, results),
   };
 }
 

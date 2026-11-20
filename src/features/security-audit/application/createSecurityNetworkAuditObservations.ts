@@ -150,6 +150,7 @@ function createEvidence(
 ): SecurityAuditEvidence {
   return {
     id: `${controlId}-network-summary`,
+    sourceId: `macos-network:${controlId}`,
     controlId,
     profileId: profile.id,
     baselineVersion: profile.baseline,

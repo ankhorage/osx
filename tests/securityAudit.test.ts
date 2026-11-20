@@ -34,6 +34,29 @@ test('default security audit is deterministic and explicitly incomplete', () => 
   expect(report.coverage.osi[1].unsupported).toBe(1);
 });
 
+test('manifest represents every canonical control with resolved, redacted evidence lineage', () => {
+  const report = createDefaultSecurityAuditReport();
+  const manifest = report.manifest;
+  expect(manifest.controls).toHaveLength(17);
+  expect(new Set(manifest.controls.map((control) => control.controlId)).size).toBe(17);
+  expect(manifest.controls.filter((control) => control.category.startsWith('osi-'))).toHaveLength(
+    7,
+  );
+  expect(manifest.controls.filter((control) => !control.category.startsWith('osi-'))).toHaveLength(
+    10,
+  );
+  for (const control of manifest.controls) {
+    expect(control.sources.length).toBeGreaterThan(0);
+    expect(new Set(control.sources.map((source) => source.id)).size).toBe(control.sources.length);
+    expect(
+      control.sources
+        .flatMap((source) => source.evidenceIds)
+        .every((id) => control.evidenceIds.includes(id)),
+    ).toBe(true);
+  }
+  expect(JSON.stringify(manifest)).not.toMatch(/-----BEGIN|\/Users\/|\b(?:\d{1,3}\.){3}\d{1,3}\b/i);
+});
+
 test('only facts satisfying the control-owned baseline predicate may pass', () => {
   const report = runSecurityAudit(controlsWithPredicate(), profile, [
     observation({ evidence: [evidence()] }),

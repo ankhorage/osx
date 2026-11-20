@@ -6,6 +6,7 @@ export {
   type MacosSecurityAuditCommandResult,
   type MacosSecurityAuditCommandRunner,
 } from './features/security-audit/adapters/outbound/createMacosSecurityAuditCommandRunner.js';
+export { createSecurityAuditManifest } from './features/security-audit/application/createSecurityAuditManifest.js';
 export { createSecurityNetworkAuditObservations } from './features/security-audit/application/createSecurityNetworkAuditObservations.js';
 export { runSecurityAudit } from './features/security-audit/application/runSecurityAudit.js';
 export { serializeSecurityAuditReport } from './features/security-audit/application/serializeSecurityAuditReport.js';
@@ -57,6 +58,7 @@ export type {
   SecurityAuditEvidence,
   SecurityAuditEvidenceBooleanFact,
   SecurityAuditExpectedBooleanFact,
+  SecurityAuditManifest,
   SecurityAuditObservation,
   SecurityAuditOutcome,
   SecurityAuditProfile,
@@ -64,6 +66,8 @@ export type {
   SecurityAuditReport,
   SecurityAuditResult,
   SecurityAuditSeverity,
+  SecurityAuditSourceProvenance,
+  SecurityAuditSourceState,
 } from './types/securityAudit.js';
 export type {
   SecurityNetworkApplicationFirewallEvidence,

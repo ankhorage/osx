@@ -214,6 +214,7 @@ function createEvidence(
   return [
     {
       id: sourceCheck.evidenceId,
+      sourceId: sourceCheck.kind,
       controlId,
       profileId: input.profile.id,
       baselineVersion: input.profile.baseline,
@@ -237,6 +238,7 @@ function unsupportedPlatformObservations(
     evidence: [
       {
         id: 'platform',
+        sourceId: 'platform:macos',
         controlId: controlCheck.controlId,
         profileId: input.profile.id,
         baselineVersion: input.profile.baseline,

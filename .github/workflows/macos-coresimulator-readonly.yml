@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   native-read-only-acceptance:
@@ -38,7 +39,22 @@ jobs:
       - name: Accept the packed provider through read-only simctl inventory
         env:
           ANKH_NATIVE_CORESIMULATOR_ACCEPTANCE: '1'
-        run: bun test --timeout 120000 tests/packedProvider.test.ts
+          ANKH_NATIVE_SECURITY_AUDIT_MANIFEST: security-audit-artifact/audit-manifest.json
+        run: |
+          mkdir -p security-audit-artifact
+          bun test --timeout 120000 tests/packedProvider.test.ts
+      - name: Verify sanitized packed security-audit artifact
+        run: |
+          test -s security-audit-artifact/audit-manifest.json
+          ! grep -E -- '-----BEGIN|/Users/|([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' security-audit-artifact/audit-manifest.json
+      - name: Upload packed security-audit manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packed-security-audit-manifest
+          path: security-audit-artifact/audit-manifest.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload CoreSimulator diagnostics
         if: always()
         uses: actions/upload-artifact@v4
