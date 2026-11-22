@@ -143,8 +143,7 @@ function hasValidEvidence(
   );
   return evidenceIds.size === evidence.length && evidenceIsValid;
 }
-/** Retain only complete, safe, bidirectional provenance captured by the collector boundary. */
-function withValidatedSources(
+/** Retain only complete, safe, bidirectional provenance captured by the collector boundary. */ function withValidatedSources(
   result: SecurityAuditResult,
   observation: unknown,
 ): SecurityAuditResult {
@@ -153,8 +152,7 @@ function withValidatedSources(
     ? createUnknownResult(result.control, 'supported', 'invalid-evidence')
     : { ...result, sources };
 }
-/** Read untrusted runtime metadata without relying on TypeScript's compile-time literal narrowing. */
-function hasMetadataValue(
+/** Read untrusted runtime metadata without relying on TypeScript's compile-time literal narrowing. */ function hasMetadataValue(
   value: object,
   key: 'access' | 'applicability' | 'failureSeverity' | 'redacted',
   expected:

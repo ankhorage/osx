@@ -411,7 +411,12 @@ test('preserves mixed source states and multiple evidence from one source withou
 });
 
 test('rejects orphan evidence and malformed or sensitive source identifiers before JSON serialization', () => {
-  for (const sourceId of [undefined, 'macos-host:/Users/alice', 'host:workstation-alice']) {
+  for (const sourceId of [
+    undefined,
+    'macos-host:/Users/alice',
+    'host:workstation-alice',
+    'macos-posture:private-username',
+  ]) {
     const report = runSecurityAudit(controlsWithPredicate(), profile, [
       observation({
         evidence: [evidence({ sourceId })],
@@ -424,6 +429,38 @@ test('rejects orphan evidence and malformed or sensitive source identifiers befo
     const result = findControl(report, controlId);
     expect(result.baseline.status).toBe('invalid-evidence');
     expect(serializeSecurityAuditReport(report)).not.toContain('alice');
+  }
+});
+
+test('rejects unknown, duplicate, and orphan lineage references without silently repairing them', () => {
+  const invalidObservations = [
+    observation({
+      evidence: [],
+      sources: [
+        { id: 'macos-network:ipv4-routes', state: 'completed', evidenceIds: ['nonexistent'] },
+      ],
+    }),
+    observation({
+      evidence: [evidence()],
+      sources: [
+        {
+          id: 'test:listener-summary',
+          state: 'completed',
+          evidenceIds: ['listener-summary', 'listener-summary'],
+        },
+      ],
+    }),
+    observation({
+      evidence: [evidence()],
+      sources: [{ id: 'test:collector', state: 'completed', evidenceIds: ['listener-summary'] }],
+    }),
+  ];
+
+  for (const invalidObservation of invalidObservations) {
+    const report = runSecurityAudit(controlsWithPredicate(), profile, [invalidObservation]);
+    const result = findControl(report, controlId);
+    expect(result.baseline.status).toBe('invalid-evidence');
+    expect(result.sources).toEqual([]);
   }
 });
 

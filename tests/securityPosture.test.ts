@@ -146,6 +146,24 @@ test('partial source availability remains unknown and omits facts from failed so
   expect(observation.applicability).toBe('unknown');
   expect(facts(observation)).not.toHaveProperty('application-proxy-not-configured');
   expect(facts(observation)).not.toHaveProperty('gatekeeper-assessments-enabled');
+  expect(observation.sources).toEqual([
+    { id: 'macos-posture:dns', state: 'completed', evidenceIds: [] },
+    { id: 'macos-posture:application-proxy', state: 'unclassified', evidenceIds: [] },
+    { id: 'macos-posture:gatekeeper', state: 'unclassified', evidenceIds: [] },
+    { id: 'macos-posture:application-signing', state: 'completed', evidenceIds: [] },
+    { id: 'macos-posture:application-assessment', state: 'completed', evidenceIds: [] },
+    {
+      id: 'macos-posture:application-disabled-services',
+      state: 'completed',
+      evidenceIds: [],
+    },
+    { id: 'macos-posture:application-listeners', state: 'completed', evidenceIds: [] },
+    {
+      id: 'macos-posture:osi7-application-network-and-persistence',
+      state: 'completed',
+      evidenceIds: ['osi7-application-network-and-persistence-metadata'],
+    },
+  ]);
 });
 
 test('failed sharing and proxy sources never manufacture absence facts', async () => {
@@ -225,7 +243,7 @@ test.skipIf(process.platform !== 'darwin')(
   },
 );
 
-test('each collector is unknown when all read-only sources are unavailable', async () => {
+test('each collector preserves unclassified individual sources when all read-only sources are unavailable', async () => {
   const unavailable = createRunner({});
   const observations = await Promise.all([
     collectSessionExposureObservationAsync(unavailable, profile, collectedAt),
@@ -233,27 +251,48 @@ test('each collector is unknown when all read-only sources are unavailable', asy
     collectApplicationPostureObservationAsync(unavailable, profile, collectedAt),
   ]);
 
-  expect(observations).toEqual([
+  expect(
+    observations.map((observation) => ({
+      controlId: observation.controlId,
+      applicability: observation.applicability,
+      access: observation.access,
+      sources: (observation.sources ?? []).map((source) => [source.id, source.state]),
+    })),
+  ).toEqual([
     {
       controlId: 'osi5-remote-session-services',
       applicability: 'unknown',
-      access: 'available',
-      evidence: [],
-      sources: [],
+      access: 'incomplete',
+      sources: [
+        ['macos-posture:remote-login', 'unclassified'],
+        ['macos-posture:sharing', 'unclassified'],
+        ['macos-posture:session-disabled-services', 'unclassified'],
+        ['macos-posture:session-listeners', 'unclassified'],
+      ],
     },
     {
       controlId: 'osi6-presentation-trust',
       applicability: 'unknown',
-      access: 'available',
-      evidence: [],
-      sources: [],
+      access: 'incomplete',
+      sources: [
+        ['macos-posture:trust-settings', 'unclassified'],
+        ['macos-posture:keychains', 'unclassified'],
+        ['macos-posture:trust-proxy', 'unclassified'],
+      ],
     },
     {
       controlId: 'osi7-application-network-and-persistence',
       applicability: 'unknown',
-      access: 'available',
-      evidence: [],
-      sources: [],
+      access: 'incomplete',
+      sources: [
+        ['macos-posture:dns', 'unclassified'],
+        ['macos-posture:application-proxy', 'unclassified'],
+        ['macos-posture:gatekeeper', 'unclassified'],
+        ['macos-posture:application-signing', 'unclassified'],
+        ['macos-posture:application-assessment', 'unclassified'],
+        ['macos-posture:application-disabled-services', 'unclassified'],
+        ['macos-posture:application-listeners', 'unclassified'],
+      ],
     },
   ]);
 });

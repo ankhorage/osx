@@ -83,6 +83,19 @@ test('distinguishes permission, timeout, and malformed JSON without exposing sou
   expect(observations[1]?.evidence[0]?.facts).toEqual(
     expect.arrayContaining([{ id: 'source-parse-failed', value: true }]),
   );
+  expect(observations[0]?.sources).toEqual(
+    expect.arrayContaining([
+      { id: 'macos-passive:hardware-ports', state: 'permission-blocked', evidenceIds: [] },
+      { id: 'macos-passive:interfaces', state: 'timed-out', evidenceIds: [] },
+      { id: 'macos-passive:device-inventory', state: 'permission-blocked', evidenceIds: [] },
+    ]),
+  );
+  expect(observations[1]?.sources).toEqual(
+    expect.arrayContaining([
+      { id: 'macos-passive:airport-metadata', state: 'completed', evidenceIds: [] },
+      { id: 'macos-passive:neighbors', state: 'permission-blocked', evidenceIds: [] },
+    ]),
+  );
   expect(JSON.stringify(observations)).not.toContain('{not-json');
 });
 

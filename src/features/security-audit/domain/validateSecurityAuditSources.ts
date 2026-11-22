@@ -2,6 +2,7 @@ import type {
   SecurityAuditEvidence,
   SecurityAuditSourceProvenance,
 } from '../../../types/securityAudit.js';
+import { isSecurityAuditSourceId } from './securityAuditSourceRegistry.js';
 
 /*** Validate safe, complete evidence-to-source provenance supplied by a collector adapter. */
 export function validateSecurityAuditSources(
@@ -10,9 +11,10 @@ export function validateSecurityAuditSources(
 ): readonly SecurityAuditSourceProvenance[] | undefined {
   if (observation === undefined) return [];
   if (!isRecord(observation)) return undefined;
-  if (observation.sources === undefined) return evidence.length === 0 ? [] : undefined;
+  const lineageEvidence = evidenceForLineage(observation, evidence);
+  if (observation.sources === undefined) return lineageEvidence.length === 0 ? [] : undefined;
   if (!Array.isArray(observation.sources)) return undefined;
-  const evidenceIds = new Set(evidence.map((item) => item.id));
+  const evidenceIds = new Set(lineageEvidence.map((item) => item.id));
   const sourceIds = new Set<string>();
   const linkedEvidenceIds = new Set<string>();
   const { sources } = observation;
@@ -20,7 +22,8 @@ export function validateSecurityAuditSources(
   const normalizedSources: SecurityAuditSourceProvenance[] = [];
   for (const source of sources) {
     const { id, state } = source;
-    const ids = source.evidenceIds.filter((evidenceId) => evidenceIds.has(evidenceId));
+    const ids = source.evidenceIds;
+    if (ids.some((evidenceId) => !evidenceIds.has(evidenceId))) return undefined;
     if (sourceIds.has(id)) return undefined;
     sourceIds.add(id);
     for (const evidenceId of ids) {
@@ -30,9 +33,10 @@ export function validateSecurityAuditSources(
     normalizedSources.push({ id, state, evidenceIds: ids });
   }
   if (linkedEvidenceIds.size !== evidenceIds.size) return undefined;
-  if (evidence.some((item) => !item.sourceId || !sourceIds.has(item.sourceId))) return undefined;
+  if (lineageEvidence.some((item) => !item.sourceId || !sourceIds.has(item.sourceId)))
+    return undefined;
   if (
-    evidence.some(
+    lineageEvidence.some(
       (item) =>
         !normalizedSources.some(
           (source) => source.id === item.sourceId && source.evidenceIds.includes(item.id),
@@ -40,7 +44,29 @@ export function validateSecurityAuditSources(
     )
   )
     return undefined;
-  return normalizedSources;
+  return resultSources(evidence, normalizedSources);
+}
+
+/** Omit evidence-linked sources when the engine safely excludes their evidence from a result. */
+function resultSources(
+  evidence: readonly SecurityAuditEvidence[],
+  sources: readonly SecurityAuditSourceProvenance[],
+): readonly SecurityAuditSourceProvenance[] {
+  return evidence.length === 0
+    ? sources.filter((source) => source.evidenceIds.length === 0)
+    : sources;
+}
+
+/** Use declared evidence only when an engine path intentionally retained none but IDs remain safe to inspect. */
+function evidenceForLineage(
+  observation: Record<string, unknown>,
+  evidence: readonly SecurityAuditEvidence[],
+): readonly SecurityAuditEvidence[] {
+  return evidence.length > 0 || !Array.isArray(observation.evidence)
+    ? evidence
+    : observation.evidence.every((item) => isRecord(item) && typeof item.id === 'string')
+      ? (observation.evidence as readonly SecurityAuditEvidence[])
+      : evidence;
 }
 
 /** Validate one serialized source boundary without accepting arbitrary host-derived identifiers. */
@@ -48,12 +74,9 @@ function isValidSource(value: unknown): value is SecurityAuditSourceProvenance {
   if (!isRecord(value) || !isSourceId(value.id) || !isSourceState(value.state)) return false;
   return Array.isArray(value.evidenceIds) && value.evidenceIds.every(isNonEmpty);
 }
-/** Accept registered namespaces and stable tokens only. */
+/** Accept only stable collector IDs from the canonical source registry. */
 function isSourceId(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^(?:macos-(?:host|network|passive|posture)|platform|test):[a-z][a-z0-9-]*$/.test(value)
-  );
+  return isSecurityAuditSourceId(value);
 }
 /** Keep source states closed so arbitrary runtime values cannot cross into JSON. */
 function isSourceState(value: unknown): value is SecurityAuditSourceProvenance['state'] {
