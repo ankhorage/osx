@@ -91,10 +91,14 @@ export type SecurityAuditSourceState =
   | 'manual'
   | 'unclassified';
 
+/** A fixed, redacted explanation for an incomplete source outcome. */
+export type SecurityAuditSourceReason = 'bounded-inventory';
+
 /** One source-level provenance record. It deliberately contains no command, arguments, or host output. */
 export interface SecurityAuditSourceProvenance {
   readonly id: string;
   readonly state: SecurityAuditSourceState;
+  readonly reason?: SecurityAuditSourceReason;
   readonly evidenceIds: readonly string[];
 }
 

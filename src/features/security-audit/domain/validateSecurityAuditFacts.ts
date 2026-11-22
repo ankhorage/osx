@@ -58,8 +58,11 @@ function isNonEmpty(value: unknown): value is string {
 
 /** Reject fact names that could encode credentials, addresses, or personal paths. */
 function containsSensitiveContent(value: string): boolean {
-  return /-----BEGIN|\b(password|passwd|secret|token|private[ _-]?key|keychain|ssid)\b|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b|\/Users\//i.test(
-    value,
+  return (
+    value !== 'keychain-metadata-observable' &&
+    /-----BEGIN|\b(password|passwd|secret|token|private[ _-]?key|keychain|ssid)\b|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b|\/Users\//i.test(
+      value,
+    )
   );
 }
 

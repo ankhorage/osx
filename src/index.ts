@@ -67,6 +67,7 @@ export type {
   SecurityAuditResult,
   SecurityAuditSeverity,
   SecurityAuditSourceProvenance,
+  SecurityAuditSourceReason,
   SecurityAuditSourceState,
 } from './types/securityAudit.js';
 export type {

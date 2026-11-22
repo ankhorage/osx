@@ -291,6 +291,70 @@ test('a control without a baseline retains valid evidence without implicitly pas
   expect(result.evidence).toHaveLength(1);
 });
 
+test('retains the fixed L6 keychain metadata fact while rejecting arbitrary keychain-derived fact identifiers', () => {
+  const controls = createSecurityAuditCatalog();
+  const l6Evidence = {
+    id: 'presentation-trust-summary',
+    sourceId: 'macos-posture:osi6-presentation-trust',
+    controlId: 'osi6-presentation-trust',
+    profileId: profile.id,
+    baselineVersion: profile.baseline,
+    kind: 'macos-posture-summary',
+    summary: 'Redacted presentation trust metadata was observed.',
+    collectedAt: '2026-11-18T00:00:00.000Z',
+    redacted: true as const,
+  };
+  const accepted = findControl(
+    runSecurityAudit(controls, profile, [
+      {
+        controlId: 'osi6-presentation-trust',
+        applicability: 'unknown',
+        access: 'available',
+        evidence: [
+          {
+            ...l6Evidence,
+            facts: [{ id: 'keychain-metadata-observable', value: true }],
+          },
+        ],
+        sources: [
+          {
+            id: 'macos-posture:osi6-presentation-trust',
+            state: 'completed',
+            evidenceIds: ['presentation-trust-summary'],
+          },
+        ],
+      },
+    ]),
+    'osi6-presentation-trust',
+  );
+
+  expect(accepted).toMatchObject({ outcome: 'unknown', coverage: 'implemented' });
+  expect(accepted.evidence).toHaveLength(1);
+
+  for (const factId of ['keychain-alice', 'keychain-metadata-/Users/alice']) {
+    const rejected = findControl(
+      runSecurityAudit(controls, profile, [
+        {
+          controlId: 'osi6-presentation-trust',
+          applicability: 'unknown',
+          access: 'available',
+          evidence: [{ ...l6Evidence, facts: [{ id: factId, value: true }] }],
+          sources: [
+            {
+              id: 'macos-posture:osi6-presentation-trust',
+              state: 'completed',
+              evidenceIds: ['presentation-trust-summary'],
+            },
+          ],
+        },
+      ]),
+      'osi6-presentation-trust',
+    );
+    expect(rejected.baseline.status).toBe('invalid-evidence');
+    expect(rejected.evidence).toEqual([]);
+  }
+});
+
 test('a malformed active profile is incompatible rather than evaluated by a lookalike baseline', () => {
   const malformedProfile = { ...profile, version: '2' };
   const result = findControl(

@@ -142,10 +142,24 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     expect(audit.exitCode).toBe(0);
     const auditReport = JSON.parse(output.join('')) as {
       readonly results: readonly {
+        readonly control: { readonly id: string };
         readonly outcome: string;
-        readonly evidence: readonly unknown[];
+        readonly evidence: readonly {
+          readonly facts: readonly { readonly id: string; readonly value: boolean }[];
+        }[];
+        readonly sources: readonly {
+          readonly id: string;
+          readonly state: string;
+          readonly reason?: string;
+        }[];
       }[];
-      readonly manifest?: unknown;
+      readonly manifest?: {
+        readonly controls: readonly {
+          readonly controlId: string;
+          readonly coverage: string;
+          readonly sources: readonly { readonly state: string; readonly reason?: string }[];
+        }[];
+      };
     };
     expect(auditReport.results).toHaveLength(17);
     expect(
@@ -153,6 +167,30 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
         (result) => result.outcome !== 'pass' || result.evidence.length > 0,
       ),
     ).toBe(true);
+    const l6 = auditReport.results.find(
+      (result) => result.control.id === 'osi6-presentation-trust',
+    );
+    if (
+      l6?.sources.some(
+        (source) => source.id === 'macos-posture:keychains' && source.state === 'completed',
+      )
+    ) {
+      expect(l6.evidence.flatMap((item) => item.facts)).toContainEqual({
+        id: 'keychain-metadata-observable',
+        value: true,
+      });
+    }
+    for (const control of auditReport.manifest?.controls ?? []) {
+      if (
+        ['osi1-physical-interface-inventory', 'osi2-link-security'].includes(control.controlId) &&
+        control.coverage === 'incomplete'
+      )
+        expect(
+          control.sources.some(
+            (source) => source.state !== 'completed' || source.reason === 'bounded-inventory',
+          ),
+        ).toBe(true);
+    }
     await writeNativeAuditManifestAsync(auditReport, packageApi);
     output.length = 0;
     const layerAudit = await runCli(
