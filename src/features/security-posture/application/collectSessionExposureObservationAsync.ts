@@ -6,6 +6,7 @@ import { createSessionExposureFacts } from '../domain/createSessionExposureFacts
 import type { MacosSecurityCommandRunner } from '../ports/macosSecurityCommandRunner.js';
 import {
   createSecurityObservation,
+  createSecuritySourceProvenance,
   createUnknownSecurityObservation,
 } from '../utils/createSecurityObservation.js';
 
@@ -27,7 +28,13 @@ export async function collectSessionExposureObservationAsync(
   const available = [remoteLogin, sharing, disabledServices, listeners].filter(
     (result) => result.exitCode === 0,
   );
-  if (available.length === 0) return createUnknownSecurityObservation(controlId);
+  const sources = createSecuritySourceProvenance([
+    { id: 'macos-posture:remote-login', result: remoteLogin },
+    { id: 'macos-posture:sharing', result: sharing },
+    { id: 'macos-posture:session-disabled-services', result: disabledServices },
+    { id: 'macos-posture:session-listeners', result: listeners },
+  ]);
+  if (available.length === 0) return createUnknownSecurityObservation(controlId, sources);
   return createSecurityObservation(
     controlId,
     profile,
@@ -41,6 +48,7 @@ export async function collectSessionExposureObservationAsync(
       listeners: successfulOutput(listeners),
     }),
     available.length === 4 ? 'applicable' : 'unknown',
+    sources,
   );
 }
 

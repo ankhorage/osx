@@ -198,6 +198,7 @@ function partialLayer3Report() {
       evidence: [
         {
           id: 'layer3-forwarding-summary',
+          sourceId: 'macos-network:ipv4-forwarding',
           controlId: 'osi3-routing-and-filtering',
           profileId: profile.id,
           baselineVersion: profile.baseline,
@@ -206,6 +207,13 @@ function partialLayer3Report() {
           collectedAt: '2026-11-18T00:00:00.000Z',
           redacted: true,
           facts: [{ id: 'ipv4-forwarding-disabled', value: true }],
+        },
+      ],
+      sources: [
+        {
+          id: 'macos-network:ipv4-forwarding',
+          state: 'completed',
+          evidenceIds: ['layer3-forwarding-summary'],
         },
       ],
     },
@@ -243,6 +251,7 @@ function observation(
     evidence: [
       {
         id: `${controlId}-evidence`,
+        sourceId: 'test:collector',
         controlId,
         profileId: profile.id,
         baselineVersion: profile.baseline,
@@ -252,6 +261,9 @@ function observation(
         redacted: true as const,
         facts: [{ id: 'collector-completed', value: true }],
       },
+    ],
+    sources: [
+      { id: 'test:collector', state: 'completed' as const, evidenceIds: [`${controlId}-evidence`] },
     ],
   };
 }

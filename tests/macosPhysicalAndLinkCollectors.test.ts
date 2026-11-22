@@ -83,6 +83,19 @@ test('distinguishes permission, timeout, and malformed JSON without exposing sou
   expect(observations[1]?.evidence[0]?.facts).toEqual(
     expect.arrayContaining([{ id: 'source-parse-failed', value: true }]),
   );
+  expect(observations[0]?.sources).toEqual(
+    expect.arrayContaining([
+      { id: 'macos-passive:hardware-ports', state: 'permission-blocked', evidenceIds: [] },
+      { id: 'macos-passive:interfaces', state: 'timed-out', evidenceIds: [] },
+      { id: 'macos-passive:device-inventory', state: 'permission-blocked', evidenceIds: [] },
+    ]),
+  );
+  expect(observations[1]?.sources).toEqual(
+    expect.arrayContaining([
+      { id: 'macos-passive:airport-metadata', state: 'parse-invalid', evidenceIds: [] },
+      { id: 'macos-passive:neighbors', state: 'permission-blocked', evidenceIds: [] },
+    ]),
+  );
   expect(JSON.stringify(observations)).not.toContain('{not-json');
 });
 
@@ -120,6 +133,54 @@ test('bounds per-interface status probes and marks truncated inventory incomplet
       ),
     ),
   ).toBe(true);
+  expect(
+    observations.every((observation) =>
+      observation.sources?.some(
+        (source) =>
+          source.id === 'macos-passive:interfaces' && source.reason === 'bounded-inventory',
+      ),
+    ),
+  ).toBe(true);
+});
+
+test('does not manufacture a bounded-inventory reason when the bounded inventory completes', async () => {
+  const observations = await collectMacosPhysicalAndLinkObservationsAsync({
+    profile,
+    collectedAt,
+    runner: countingRunner([]),
+  });
+
+  expect(
+    observations.every(
+      (observation) =>
+        !observation.sources?.some((source) => source.reason === 'bounded-inventory'),
+    ),
+  ).toBe(true);
+});
+
+test('marks the fixed interface inventory source parse-invalid without preserving interface names', async () => {
+  const observations = await collectMacosPhysicalAndLinkObservationsAsync({
+    profile,
+    collectedAt,
+    runner: fixtureRunner({
+      '/sbin/ifconfig -l': 'host-private-interface',
+      '/usr/sbin/system_profiler SPUSBDataType SPThunderboltDataType SPBluetoothDataType -json':
+        '{}',
+      '/usr/sbin/system_profiler SPAirPortDataType -json': '{}',
+      '/usr/sbin/arp -an': '',
+      '/usr/sbin/networksetup -listallhardwareports': '',
+    }),
+  });
+
+  expect(observations.every((observation) => observation.access === 'incomplete')).toBe(true);
+  expect(
+    observations.every((observation) =>
+      observation.sources?.some(
+        (source) => source.id === 'macos-passive:interfaces' && source.state === 'parse-invalid',
+      ),
+    ),
+  ).toBe(true);
+  expect(JSON.stringify(observations)).not.toContain('host-private-interface');
 });
 
 test('does not execute macOS commands or imply support on another platform', async () => {

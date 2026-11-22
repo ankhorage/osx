@@ -6,6 +6,7 @@ import { createApplicationPostureFacts } from '../domain/createApplicationPostur
 import type { MacosSecurityCommandRunner } from '../ports/macosSecurityCommandRunner.js';
 import {
   createSecurityObservation,
+  createSecuritySourceProvenance,
   createUnknownSecurityObservation,
 } from '../utils/createSecurityObservation.js';
 
@@ -29,7 +30,16 @@ export async function collectApplicationPostureObservationAsync(
     disabledServices,
     listeners,
   ].filter((result) => result.exitCode === 0);
-  if (available.length === 0) return createUnknownSecurityObservation(controlId);
+  const sources = createSecuritySourceProvenance([
+    { id: 'macos-posture:dns', result: dns },
+    { id: 'macos-posture:application-proxy', result: proxy },
+    { id: 'macos-posture:gatekeeper', result: gatekeeper },
+    { id: 'macos-posture:application-signing', result: signing },
+    { id: 'macos-posture:application-assessment', result: applicationAssessment },
+    { id: 'macos-posture:application-disabled-services', result: disabledServices },
+    { id: 'macos-posture:application-listeners', result: listeners },
+  ]);
+  if (available.length === 0) return createUnknownSecurityObservation(controlId, sources);
   return createSecurityObservation(
     controlId,
     profile,
@@ -46,6 +56,7 @@ export async function collectApplicationPostureObservationAsync(
       listeners: successfulOutput(listeners),
     }),
     available.length === 7 ? 'applicable' : 'unknown',
+    sources,
   );
 }
 

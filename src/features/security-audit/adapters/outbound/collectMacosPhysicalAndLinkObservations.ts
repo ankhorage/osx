@@ -2,6 +2,7 @@ import type {
   SecurityAuditEvidence,
   SecurityAuditObservation,
   SecurityAuditProfile,
+  SecurityAuditSourceProvenance,
 } from '../../../../types/securityAudit.js';
 import {
   collectMacosPhysicalAndLinkSourcesAsync,
@@ -74,6 +75,11 @@ function physicalObservation(
         ],
       ),
     ],
+    sourceProvenance(sources, [
+      ['macos-passive:hardware-ports', sources.hardwarePorts],
+      ['macos-passive:interfaces', sources.interfaces],
+      ['macos-passive:device-inventory', sources.deviceInventory],
+    ]),
   );
 }
 
@@ -114,6 +120,12 @@ function linkObservation(input: CollectorInput, sources: LinkSources): SecurityA
         ],
       ),
     ],
+    sourceProvenance(sources, [
+      ['macos-passive:interfaces', sources.interfaces],
+      ['macos-passive:device-inventory', sources.deviceInventory],
+      ['macos-passive:airport-metadata', sources.airportMetadata],
+      ['macos-passive:neighbors', sources.neighbors],
+    ]),
   );
 }
 
@@ -187,6 +199,7 @@ function evidence(
 ): SecurityAuditEvidence {
   return {
     id,
+    sourceId: `macos-passive:${id}`,
     controlId,
     profileId: input.profile.id,
     baselineVersion: input.profile.baseline,
@@ -240,6 +253,70 @@ function observation(
   applicability: SecurityAuditObservation['applicability'],
   access: SecurityAuditObservation['access'],
   evidenceItems: readonly SecurityAuditEvidence[],
+  sourceStates: readonly SecurityAuditSourceProvenance[] = [],
 ): SecurityAuditObservation {
-  return { controlId, applicability, access, evidence: evidenceItems };
+  return {
+    controlId,
+    applicability,
+    access,
+    evidence: evidenceItems,
+    sources: [
+      ...sourceStates,
+      ...evidenceItems.map((item) => ({
+        id: item.sourceId ?? 'macos-passive:physical-interface-sources',
+        state: 'completed' as const,
+        evidenceIds: [item.id],
+      })),
+    ],
+  };
+}
+
+/** Translate each fixed passive command attempt into a registered redacted source outcome. */
+function sourceProvenance(
+  sourceSet: {
+    readonly interfaceStatusInventory: InterfaceStatusInventory;
+    readonly airportMetadata?: CommandResult;
+  },
+  sources: readonly (readonly [string, CommandResult])[],
+): readonly SecurityAuditSourceProvenance[] {
+  return [
+    ...sources.map(([id, result]) => ({
+      id,
+      state:
+        id === 'macos-passive:interfaces' && sourceSet.interfaceStatusInventory.parseFailed
+          ? ('parse-invalid' as const)
+          : id === 'macos-passive:airport-metadata' &&
+              sourceSet.airportMetadata !== undefined &&
+              hasParseFailure(sourceSet.airportMetadata)
+            ? ('parse-invalid' as const)
+            : sourceState(result),
+      ...(id === 'macos-passive:interfaces' && sourceSet.interfaceStatusInventory.truncated
+        ? { reason: 'bounded-inventory' as const }
+        : {}),
+      evidenceIds: [],
+    })),
+    ...interfaceStatusSources(sourceSet.interfaceStatusInventory),
+  ];
+}
+
+/** Preserve the bounded probe ordinal without exposing the host interface name that was queried. */
+function interfaceStatusSources(
+  inventory: InterfaceStatusInventory,
+): readonly SecurityAuditSourceProvenance[] {
+  return [
+    ...inventory.results.map((result, index) => ({
+      id: `macos-passive:interface-status-${index + 1}`,
+      state: sourceState(result),
+      evidenceIds: [],
+    })),
+  ];
+}
+
+/** Map the command adapter's explicit outcome without upgrading failures to a security conclusion. */
+function sourceState(result: CommandResult): SecurityAuditSourceProvenance['state'] {
+  if (result.kind === 'available') return 'completed';
+  if (result.kind === 'missing') return 'missing';
+  if (result.kind === 'permission-denied') return 'permission-blocked';
+  if (result.kind === 'timed-out') return 'timed-out';
+  return 'failed';
 }

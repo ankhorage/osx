@@ -34,6 +34,29 @@ test('default security audit is deterministic and explicitly incomplete', () => 
   expect(report.coverage.osi[1].unsupported).toBe(1);
 });
 
+test('manifest represents every canonical control with resolved, redacted evidence lineage', () => {
+  const report = createDefaultSecurityAuditReport();
+  const manifest = report.manifest;
+  expect(manifest.controls).toHaveLength(17);
+  expect(new Set(manifest.controls.map((control) => control.controlId)).size).toBe(17);
+  expect(manifest.controls.filter((control) => control.category.startsWith('osi-'))).toHaveLength(
+    7,
+  );
+  expect(manifest.controls.filter((control) => !control.category.startsWith('osi-'))).toHaveLength(
+    10,
+  );
+  for (const control of manifest.controls) {
+    expect(control.sources.length).toBe(0);
+    expect(new Set(control.sources.map((source) => source.id)).size).toBe(control.sources.length);
+    expect(
+      control.sources
+        .flatMap((source) => source.evidenceIds)
+        .every((id) => control.evidenceIds.includes(id)),
+    ).toBe(true);
+  }
+  expect(JSON.stringify(manifest)).not.toMatch(/-----BEGIN|\/Users\/|\b(?:\d{1,3}\.){3}\d{1,3}\b/i);
+});
+
 test('only facts satisfying the control-owned baseline predicate may pass', () => {
   const report = runSecurityAudit(controlsWithPredicate(), profile, [
     observation({ evidence: [evidence()] }),
@@ -67,6 +90,13 @@ test('catalog baselines remain narrowly limited while valid no-baseline evidence
           id: `${control.id}-generic-affirmation`,
           controlId: control.id,
           facts: [{ id: 'secure-condition-observed', value: true }],
+        },
+      ],
+      sources: [
+        {
+          id: 'test:listener-summary',
+          state: 'completed' as const,
+          evidenceIds: [`${control.id}-generic-affirmation`],
         },
       ],
     })),
@@ -178,6 +208,9 @@ test('validated partial L3/L4 and SIP observations retain evidence without evalu
             facts: [{ id: 'system-integrity-protection-enabled', value: true }],
           },
         ],
+        sources: [
+          { id: 'test:listener-summary', state: 'completed', evidenceIds: ['sip-summary'] },
+        ],
       },
     ]),
     'cross-layer-hardware-startup-trust',
@@ -256,6 +289,70 @@ test('a control without a baseline retains valid evidence without implicitly pas
   expect(result).toMatchObject({ outcome: 'unknown', coverage: 'implemented' });
   expect(result.baseline.status).toBe('profile-incompatible');
   expect(result.evidence).toHaveLength(1);
+});
+
+test('retains the fixed L6 keychain metadata fact while rejecting arbitrary keychain-derived fact identifiers', () => {
+  const controls = createSecurityAuditCatalog();
+  const l6Evidence = {
+    id: 'presentation-trust-summary',
+    sourceId: 'macos-posture:osi6-presentation-trust',
+    controlId: 'osi6-presentation-trust',
+    profileId: profile.id,
+    baselineVersion: profile.baseline,
+    kind: 'macos-posture-summary',
+    summary: 'Redacted presentation trust metadata was observed.',
+    collectedAt: '2026-11-18T00:00:00.000Z',
+    redacted: true as const,
+  };
+  const accepted = findControl(
+    runSecurityAudit(controls, profile, [
+      {
+        controlId: 'osi6-presentation-trust',
+        applicability: 'unknown',
+        access: 'available',
+        evidence: [
+          {
+            ...l6Evidence,
+            facts: [{ id: 'keychain-metadata-observable', value: true }],
+          },
+        ],
+        sources: [
+          {
+            id: 'macos-posture:osi6-presentation-trust',
+            state: 'completed',
+            evidenceIds: ['presentation-trust-summary'],
+          },
+        ],
+      },
+    ]),
+    'osi6-presentation-trust',
+  );
+
+  expect(accepted).toMatchObject({ outcome: 'unknown', coverage: 'implemented' });
+  expect(accepted.evidence).toHaveLength(1);
+
+  for (const factId of ['keychain-alice', 'keychain-metadata-/Users/alice']) {
+    const rejected = findControl(
+      runSecurityAudit(controls, profile, [
+        {
+          controlId: 'osi6-presentation-trust',
+          applicability: 'unknown',
+          access: 'available',
+          evidence: [{ ...l6Evidence, facts: [{ id: factId, value: true }] }],
+          sources: [
+            {
+              id: 'macos-posture:osi6-presentation-trust',
+              state: 'completed',
+              evidenceIds: ['presentation-trust-summary'],
+            },
+          ],
+        },
+      ]),
+      'osi6-presentation-trust',
+    );
+    expect(rejected.baseline.status).toBe('invalid-evidence');
+    expect(rejected.evidence).toEqual([]);
+  }
 });
 
 test('a malformed active profile is incompatible rather than evaluated by a lookalike baseline', () => {
@@ -349,13 +446,107 @@ test('a collector baseline assertion without predicate facts remains unknown', (
   expect(result.baseline.status).toBe('invalid-evidence');
 });
 
+test('preserves mixed source states and multiple evidence from one source without inferring coverage', () => {
+  const report = runSecurityAudit(controlsWithPredicate(), profile, [
+    observation({
+      access: 'incomplete',
+      evidence: [
+        evidence({ id: 'route-a', sourceId: 'macos-network:ipv4-routes' }),
+        evidence({ id: 'route-b', sourceId: 'macos-network:ipv4-routes' }),
+      ],
+      sources: [
+        {
+          id: 'macos-network:ipv4-routes',
+          state: 'completed',
+          evidenceIds: ['route-a', 'route-b'],
+        },
+        { id: 'macos-network:pf-status', state: 'permission-blocked', evidenceIds: [] },
+      ],
+    }),
+  ]);
+  const result = findControl(report, controlId);
+  expect(result.sources).toEqual([
+    { id: 'macos-network:ipv4-routes', state: 'completed', evidenceIds: ['route-a', 'route-b'] },
+    { id: 'macos-network:pf-status', state: 'permission-blocked', evidenceIds: [] },
+  ]);
+  expect(
+    report.manifest.controls.find((control) => control.controlId === controlId)?.sources,
+  ).toEqual(result.sources);
+});
+
+test('rejects orphan evidence and malformed or sensitive source identifiers before JSON serialization', () => {
+  for (const sourceId of [
+    undefined,
+    'macos-host:/Users/alice',
+    'host:workstation-alice',
+    'macos-posture:private-username',
+  ]) {
+    const report = runSecurityAudit(controlsWithPredicate(), profile, [
+      observation({
+        evidence: [evidence({ sourceId })],
+        sources:
+          sourceId === undefined
+            ? []
+            : [{ id: sourceId, state: 'completed', evidenceIds: ['listener-summary'] }],
+      }),
+    ]);
+    const result = findControl(report, controlId);
+    expect(result.baseline.status).toBe('invalid-evidence');
+    expect(serializeSecurityAuditReport(report)).not.toContain('alice');
+  }
+});
+
+test('rejects unknown, duplicate, and orphan lineage references without silently repairing them', () => {
+  const invalidObservations = [
+    observation({
+      evidence: [],
+      sources: [
+        { id: 'macos-network:ipv4-routes', state: 'completed', evidenceIds: ['nonexistent'] },
+      ],
+    }),
+    observation({
+      evidence: [evidence()],
+      sources: [
+        {
+          id: 'test:listener-summary',
+          state: 'completed',
+          evidenceIds: ['listener-summary', 'listener-summary'],
+        },
+      ],
+    }),
+    observation({
+      evidence: [evidence()],
+      sources: [{ id: 'test:collector', state: 'completed', evidenceIds: ['listener-summary'] }],
+    }),
+  ];
+
+  for (const invalidObservation of invalidObservations) {
+    const report = runSecurityAudit(controlsWithPredicate(), profile, [invalidObservation]);
+    const result = findControl(report, controlId);
+    expect(result.baseline.status).toBe('invalid-evidence');
+    expect(result.sources).toEqual([]);
+  }
+});
+
 /** Construct a collector observation with only engine-owned evaluation fields omitted. */
 function observation(overrides: Partial<SecurityAuditObservation> = {}): SecurityAuditObservation {
+  const evidenceItems = overrides.evidence ?? [];
   return {
     controlId,
     applicability: 'applicable',
     access: 'available',
-    evidence: [],
+    evidence: evidenceItems,
+    sources:
+      overrides.sources ??
+      [
+        ...new Set(
+          evidenceItems.flatMap((item) => (item.sourceId === undefined ? [] : [item.sourceId])),
+        ),
+      ].map((id) => ({
+        id,
+        state: 'completed' as const,
+        evidenceIds: evidenceItems.filter((item) => item.sourceId === id).map((item) => item.id),
+      })),
     ...overrides,
   };
 }
@@ -364,6 +555,7 @@ function observation(overrides: Partial<SecurityAuditObservation> = {}): Securit
 function evidence(overrides: Partial<SecurityAuditEvidence> = {}): SecurityAuditEvidence {
   return {
     id: 'listener-summary',
+    sourceId: 'test:listener-summary',
     controlId,
     profileId: profile.id,
     baselineVersion: profile.baseline,

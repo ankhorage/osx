@@ -6,6 +6,7 @@ import { createPresentationTrustFacts } from '../domain/createPresentationTrustF
 import type { MacosSecurityCommandRunner } from '../ports/macosSecurityCommandRunner.js';
 import {
   createSecurityObservation,
+  createSecuritySourceProvenance,
   createUnknownSecurityObservation,
 } from '../utils/createSecurityObservation.js';
 
@@ -24,7 +25,12 @@ export async function collectPresentationTrustObservationAsync(
     runner.runAsync(['/usr/sbin/scutil', '--proxy'], input),
   ]);
   const available = [trustSettings, keychains, proxy].filter((result) => result.exitCode === 0);
-  if (available.length === 0) return createUnknownSecurityObservation(controlId);
+  const sources = createSecuritySourceProvenance([
+    { id: 'macos-posture:trust-settings', result: trustSettings },
+    { id: 'macos-posture:keychains', result: keychains },
+    { id: 'macos-posture:trust-proxy', result: proxy },
+  ]);
+  if (available.length === 0) return createUnknownSecurityObservation(controlId, sources);
   return createSecurityObservation(
     controlId,
     profile,
@@ -37,6 +43,7 @@ export async function collectPresentationTrustObservationAsync(
       proxy: successfulOutput(proxy),
     }),
     available.length === 3 ? 'applicable' : 'unknown',
+    sources,
   );
 }
 

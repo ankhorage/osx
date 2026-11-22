@@ -65,6 +65,8 @@ export interface SecurityAuditEvidenceBooleanFact {
 /** A redacted, serializable fact collected for one control. */
 export interface SecurityAuditEvidence {
   readonly id: string;
+  /** Stable, non-sensitive identifier for the collector check that produced this evidence. */
+  readonly sourceId?: string;
   readonly controlId: string;
   readonly profileId: string;
   readonly baselineVersion: string;
@@ -73,6 +75,48 @@ export interface SecurityAuditEvidence {
   readonly collectedAt: string;
   readonly redacted: true;
   readonly facts: readonly SecurityAuditEvidenceBooleanFact[];
+}
+
+/** A privacy-safe outcome for one attempted, omitted, or unavailable collector source. */
+export type SecurityAuditSourceState =
+  | 'completed'
+  | 'missing'
+  | 'permission-blocked'
+  | 'timed-out'
+  | 'aborted'
+  | 'parse-invalid'
+  | 'failed'
+  | 'not-queried'
+  | 'unsupported'
+  | 'manual'
+  | 'unclassified';
+
+/** A fixed, redacted explanation for an incomplete source outcome. */
+export type SecurityAuditSourceReason = 'bounded-inventory';
+
+/** One source-level provenance record. It deliberately contains no command, arguments, or host output. */
+export interface SecurityAuditSourceProvenance {
+  readonly id: string;
+  readonly state: SecurityAuditSourceState;
+  readonly reason?: SecurityAuditSourceReason;
+  readonly evidenceIds: readonly string[];
+}
+
+/** Deterministic, sanitized inventory suitable for durable CI storage. */
+export interface SecurityAuditManifest {
+  readonly schemaVersion: 1;
+  readonly profileId: string;
+  readonly profileVersion: string;
+  readonly baseline: string;
+  readonly controls: readonly {
+    readonly controlId: string;
+    readonly category: string;
+    readonly coverage: SecurityAuditCoverage;
+    readonly outcome: SecurityAuditOutcome;
+    readonly baselineStatus: SecurityAuditBaselineEvaluation['status'];
+    readonly evidenceIds: readonly string[];
+    readonly sources: readonly SecurityAuditSourceProvenance[];
+  }[];
 }
 
 /** A stable control definition; concrete collectors remain outside this portable model. */
@@ -106,6 +150,8 @@ export interface SecurityAuditObservation {
   readonly applicability: SecurityAuditApplicability;
   readonly access: 'available' | 'incomplete' | 'permission-blocked';
   readonly evidence: readonly SecurityAuditEvidence[];
+  /** Source outcomes captured by the owning collector adapter, never inferred from control coverage. */
+  readonly sources?: readonly SecurityAuditSourceProvenance[];
 }
 
 /** Explain the engine-owned evidence decision behind a result. */
@@ -132,6 +178,7 @@ export interface SecurityAuditResult {
   readonly severity: SecurityAuditSeverity;
   readonly confidence: SecurityAuditConfidence;
   readonly evidence: readonly SecurityAuditEvidence[];
+  readonly sources: readonly SecurityAuditSourceProvenance[];
   readonly recommendation: SecurityAuditRecommendation;
   readonly baseline: SecurityAuditBaselineEvaluation;
 }
@@ -159,4 +206,5 @@ export interface SecurityAuditReport {
   readonly profile: SecurityAuditProfile;
   readonly results: readonly SecurityAuditResult[];
   readonly coverage: SecurityAuditCoverageMatrix;
+  readonly manifest: SecurityAuditManifest;
 }
