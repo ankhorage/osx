@@ -16,6 +16,26 @@ Open `./paradox/index.html` locally in your browser to browse the complete docum
 ## Contributors
 
 <!-- readme: contributors -start -->
+<table>
+	<tbody>
+		<tr>
+            <td align="center">
+                <a href="https://github.com/artiphishle">
+                    <img src="https://avatars.githubusercontent.com/u/137318798?v=4" width="100;" alt="artiphishle"/>
+                    <br />
+                    <sub><b>Fabio Gartenmann</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/faeb187">
+                    <img src="https://avatars.githubusercontent.com/u/389333?v=4" width="100;" alt="faeb187"/>
+                    <br />
+                    <sub><b>Fabio Gartenmann</b></sub>
+                </a>
+            </td>
+		</tr>
+	<tbody>
+</table>
 <!-- readme: contributors -end -->
 
 ## Donation
