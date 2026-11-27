@@ -2,6 +2,8 @@ import type { AnkhRuntimeCommandProvider } from '@ankhorage/ankh';
 import type { Capability } from '@ankhorage/contracts/capability';
 
 import packageJson from '../../package.json';
+import { diagnose } from './commands/network/diagnose.js';
+import { info } from './commands/network/info.js';
 import { audit } from './commands/security/audit.js';
 import { list } from './commands/security/controls/list.js';
 import { clean } from './commands/storage/clean.js';
@@ -45,6 +47,20 @@ const capabilities = [
     binding: { kind: 'action', bindableAs: ['target'] },
     label: 'List macOS security controls',
   },
+  {
+    id: 'osx.network.info',
+    owner: '@ankhorage/osx',
+    access: ['invoke'],
+    binding: { kind: 'action', bindableAs: ['target'] },
+    label: 'Inspect local network configuration',
+  },
+  {
+    id: 'osx.network.diagnose',
+    owner: '@ankhorage/osx',
+    access: ['invoke'],
+    binding: { kind: 'action', bindableAs: ['target'] },
+    label: 'Inspect local network posture',
+  },
 ] as const satisfies readonly Capability[];
 
 const provider = {
@@ -79,6 +95,16 @@ const provider = {
       capability: 'osx.storage.scan',
       summary: 'Inspect Xcode Simulator runtimes.',
     },
+    {
+      path: ['network', 'info'],
+      capability: 'osx.network.info',
+      summary: 'Inspect local network configuration.',
+    },
+    {
+      path: ['network', 'diagnose'],
+      capability: 'osx.network.diagnose',
+      summary: 'Inspect local network posture.',
+    },
   ],
   handlers: [
     { path: ['storage', 'scan'], handler: scan },
@@ -87,6 +113,8 @@ const provider = {
     { path: ['security', 'audit'], handler: audit },
     { path: ['security', 'controls', 'list'], handler: list },
     { path: ['storage', 'xcode', 'scan'], handler: scanXcode },
+    { path: ['network', 'info'], handler: info },
+    { path: ['network', 'diagnose'], handler: diagnose },
   ],
 } satisfies AnkhRuntimeCommandProvider;
 

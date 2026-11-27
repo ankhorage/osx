@@ -43,6 +43,8 @@ function unavailableLayer3Results(): Awaited<ReturnType<typeof collectLayer3Comm
     unavailableResult(),
     unavailableResult(),
     unavailableResult(),
+    unavailableResult(),
+    unavailableResult(),
   ];
 }
 

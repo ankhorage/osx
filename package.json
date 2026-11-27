@@ -143,6 +143,34 @@
           ]
         },
         "label": "List macOS security controls"
+      },
+      {
+        "id": "osx.network.info",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "Inspect local network configuration"
+      },
+      {
+        "id": "osx.network.diagnose",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "Inspect local network posture"
       }
     ]
   }

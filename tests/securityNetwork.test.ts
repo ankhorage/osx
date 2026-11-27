@@ -12,6 +12,8 @@ test('collects IPv4, IPv6, routing, tunnel, and pf evidence without retaining se
       'netstat -rn -f inet6': 'default fe80::1%en0 UGSc',
       'sysctl -n net.inet.ip.forwarding': '0',
       'sysctl -n net.inet6.ip6.forwarding': '1',
+      'scutil --dns': 'DNS configuration\nresolver #1\nnameserver[0] : 192.0.2.53\nresolver #2',
+      'scutil --proxy': 'HTTPEnable : 1\nHTTPProxy : proxy.example\nHTTPSEnable : 0',
       'scutil --nc list': '* (Connected) ABCD VPN\n  (Disconnected) EFGH VPN',
       'systemextensionsctl list': 'ABC com.example.NetworkExtension\nABC com.example.Other',
       'pfctl -s info': 'Status: Enabled for 0 days',
@@ -29,6 +31,9 @@ test('collects IPv4, IPv6, routing, tunnel, and pf evidence without retaining se
     ipv6DefaultGatewayObserved: true,
     ipv4Forwarding: 'disabled',
     ipv6Forwarding: 'enabled',
+    dnsResolverCount: 2,
+    webProxy: 'enabled',
+    secureWebProxy: 'disabled',
     vpnServiceCount: 2,
     networkExtensionCount: 1,
   });
@@ -41,6 +46,8 @@ test('collects IPv4, IPv6, routing, tunnel, and pf evidence without retaining se
   expect(JSON.stringify(evidence)).not.toContain('192.0.2.7');
   expect(JSON.stringify(evidence)).not.toContain('2001:db8');
   expect(JSON.stringify(evidence)).not.toContain('com.example');
+  expect(JSON.stringify(evidence)).not.toContain('192.0.2.53');
+  expect(JSON.stringify(evidence)).not.toContain('proxy.example');
 });
 
 test('keeps pf and ALF distinct and reports permission-denied pf sources without a protection claim', async () => {

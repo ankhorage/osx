@@ -22,6 +22,11 @@ export interface SecurityNetworkLayer3Evidence {
   readonly ipv4Forwarding: SecurityNetworkSetting;
   readonly ipv6ForwardingAvailability: SecurityNetworkEvidenceAvailability;
   readonly ipv6Forwarding: SecurityNetworkSetting;
+  readonly dnsAvailability: SecurityNetworkEvidenceAvailability;
+  readonly dnsResolverCount: SecurityNetworkObserved<number>;
+  readonly proxyAvailability: SecurityNetworkEvidenceAvailability;
+  readonly webProxy: SecurityNetworkSetting;
+  readonly secureWebProxy: SecurityNetworkSetting;
   readonly vpnServicesAvailability: SecurityNetworkEvidenceAvailability;
   readonly vpnServiceCount: SecurityNetworkObserved<number>;
   readonly networkExtensionsAvailability: SecurityNetworkEvidenceAvailability;
