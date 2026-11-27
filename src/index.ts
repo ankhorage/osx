@@ -33,6 +33,8 @@ export { collectMacosSecurityPostureObservationsAsync } from './features/securit
 export { cleanStorageAsync } from './features/storage/application/cleanStorageAsync.js';
 export { scanOrphanedApplicationsAsync } from './features/storage/application/scanOrphanedApplicationsAsync.js';
 export { scanStorageAsync } from './features/storage/composition/scanStorageAsync.js';
+export { inventoryInodesAsync, type InodeInventory } from './features/storage/application/inventoryInodesAsync.js';
+export { collectMacosApfsAsync, type MacosApfsDiagnostics } from './features/storage/adapters/outbound/collectMacosApfsAsync.js';
 export {
   createSimctlRuntimeScanner,
   parseRuntimeInventoryAsync,

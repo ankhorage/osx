@@ -5,6 +5,8 @@ import packageJson from '../../package.json';
 import { audit } from './commands/security/audit.js';
 import { list } from './commands/security/controls/list.js';
 import { clean } from './commands/storage/clean.js';
+import { apfs } from './commands/storage/apfs.js';
+import { inodes } from './commands/storage/inodes.js';
 import { scan as scanOrphans } from './commands/storage/orphans/scan.js';
 import { scan } from './commands/storage/scan.js';
 import { scan as scanXcode } from './commands/storage/xcode/scan.js';
@@ -54,6 +56,8 @@ const provider = {
   capabilities,
   commands: [
     { path: ['storage', 'scan'], capability: 'osx.storage.scan', summary: 'Inspect user storage.' },
+    { path: ['storage', 'inodes'], capability: 'osx.storage.scan', summary: 'Count accessible filesystem entries.' },
+    { path: ['storage', 'apfs'], capability: 'osx.storage.scan', summary: 'Inspect APFS and live inode accounting.' },
     {
       path: ['storage', 'clean'],
       capability: 'osx.storage.clean',
@@ -82,6 +86,8 @@ const provider = {
   ],
   handlers: [
     { path: ['storage', 'scan'], handler: scan },
+    { path: ['storage', 'inodes'], handler: inodes },
+    { path: ['storage', 'apfs'], handler: apfs },
     { path: ['storage', 'clean'], handler: clean },
     { path: ['storage', 'orphans', 'scan'], handler: scanOrphans },
     { path: ['security', 'audit'], handler: audit },
