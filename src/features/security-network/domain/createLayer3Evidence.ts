@@ -14,6 +14,8 @@ export function createLayer3Evidence(
   ipv6Routes: SecurityNetworkCommandResult,
   ipv4Forwarding: SecurityNetworkCommandResult,
   ipv6Forwarding: SecurityNetworkCommandResult,
+  dns: SecurityNetworkCommandResult,
+  proxy: SecurityNetworkCommandResult,
   vpnServices: SecurityNetworkCommandResult,
   networkExtensions: SecurityNetworkCommandResult,
   packetFilterStatus: SecurityNetworkCommandResult,
@@ -30,6 +32,8 @@ export function createLayer3Evidence(
       ipv6Routes,
       ipv4Forwarding,
       ipv6Forwarding,
+      dns,
+      proxy,
       vpnServices,
       networkExtensions,
     ),
@@ -54,6 +58,8 @@ function createLayer3Measurements(
   ipv6Routes: SecurityNetworkCommandResult,
   ipv4Forwarding: SecurityNetworkCommandResult,
   ipv6Forwarding: SecurityNetworkCommandResult,
+  dns: SecurityNetworkCommandResult,
+  proxy: SecurityNetworkCommandResult,
   vpnServices: SecurityNetworkCommandResult,
   networkExtensions: SecurityNetworkCommandResult,
 ): SecurityNetworkLayer3Evidence {
@@ -74,6 +80,13 @@ function createLayer3Measurements(
     ipv4Forwarding: parseForwarding(ipv4Forwarding),
     ipv6ForwardingAvailability: availability(ipv6Forwarding),
     ipv6Forwarding: parseForwarding(ipv6Forwarding),
+    dnsAvailability: availability(dns),
+    dnsResolverCount: measured(dns, (result) =>
+      countMatches(result.stdout, /^resolver #\d+/gim),
+    ),
+    proxyAvailability: availability(proxy),
+    webProxy: parseProxySetting(proxy, 'HTTPEnable'),
+    secureWebProxy: parseProxySetting(proxy, 'HTTPSEnable'),
     vpnServicesAvailability: availability(vpnServices),
     vpnServiceCount: measured(vpnServices, (result) => countServiceLines(result.stdout)),
     networkExtensionsAvailability: availability(networkExtensions),
@@ -106,6 +119,17 @@ function parseForwarding(result: SecurityNetworkCommandResult): SecurityNetworkS
   if (result.status !== 'completed') return 'unknown';
   if (result.stdout.trim() === '1') return 'enabled';
   if (result.stdout.trim() === '0') return 'disabled';
+  return 'unknown';
+}
+
+/*** Interpret only explicit proxy enable flags, without retaining proxy hostnames or ports. */
+function parseProxySetting(
+  result: SecurityNetworkCommandResult,
+  key: 'HTTPEnable' | 'HTTPSEnable',
+): SecurityNetworkSetting {
+  if (result.status !== 'completed') return 'unknown';
+  if (new RegExp(`${key}\\s*:\\s*1\\b`, 'i').test(result.stdout)) return 'enabled';
+  if (new RegExp(`${key}\\s*:\\s*0\\b`, 'i').test(result.stdout)) return 'disabled';
   return 'unknown';
 }
 

@@ -19,6 +19,8 @@ export async function collectLayer3CommandResultsAsync(
     SecurityNetworkCommandResult,
     SecurityNetworkCommandResult,
     SecurityNetworkCommandResult,
+    SecurityNetworkCommandResult,
+    SecurityNetworkCommandResult,
   ]
 > {
   return Promise.all([
@@ -27,6 +29,8 @@ export async function collectLayer3CommandResultsAsync(
     host.executeAsync(['netstat', '-rn', '-f', 'inet6'], input),
     host.executeAsync(['sysctl', '-n', 'net.inet.ip.forwarding'], input),
     host.executeAsync(['sysctl', '-n', 'net.inet6.ip6.forwarding'], input),
+    host.executeAsync(['scutil', '--dns'], input),
+    host.executeAsync(['scutil', '--proxy'], input),
     host.executeAsync(['scutil', '--nc', 'list'], input),
     host.executeAsync(['systemextensionsctl', 'list'], input),
     host.executeAsync(['pfctl', '-s', 'info'], input),
