@@ -33,6 +33,7 @@ export { collectMacosSecurityPostureObservationsAsync } from './features/securit
 export { cleanStorageAsync } from './features/storage/application/cleanStorageAsync.js';
 export { scanOrphanedApplicationsAsync } from './features/storage/application/scanOrphanedApplicationsAsync.js';
 export { scanStorageAsync } from './features/storage/composition/scanStorageAsync.js';
+export { scanDeveloperInventoryAsync } from './features/developer/adapters/outbound/scanDeveloperInventoryAsync.js';
 export {
   createSimctlRuntimeScanner,
   parseRuntimeInventoryAsync,
@@ -87,4 +88,13 @@ export type {
   StorageExecution,
   StorageOperations,
 } from './types/storage.js';
+export type {
+  DeveloperArtifactInventory,
+  DeveloperGitStatus,
+  DeveloperInventoryReport,
+  DeveloperRootInventory,
+  DeveloperTemporaryProject,
+  DeveloperToolchain,
+  DeveloperWorktree,
+} from './types/developer.js';
 export type { SimctlHost, XcodeRuntime } from './types/xcodeRuntime.js';
