@@ -8,6 +8,7 @@ import { clean } from './commands/storage/clean.js';
 import { scan as scanOrphans } from './commands/storage/orphans/scan.js';
 import { scan } from './commands/storage/scan.js';
 import { scan as scanXcode } from './commands/storage/xcode/scan.js';
+import { inventory } from './commands/developer/inventory.js';
 
 const capabilities = [
   {
@@ -79,6 +80,10 @@ const provider = {
       capability: 'osx.storage.scan',
       summary: 'Inspect Xcode Simulator runtimes.',
     },
+    { path: ['developer', 'audit'], summary: 'Audit configured development workspaces.' },
+    { path: ['developer', 'worktrees', 'scan'], summary: 'Inspect Git worktree safety evidence.' },
+    { path: ['developer', 'temp', 'scan'], summary: 'Inspect recognized temporary project candidates.' },
+    { path: ['developer', 'caches'], summary: 'Inspect development cache candidates.' },
   ],
   handlers: [
     { path: ['storage', 'scan'], handler: scan },
@@ -87,6 +92,10 @@ const provider = {
     { path: ['security', 'audit'], handler: audit },
     { path: ['security', 'controls', 'list'], handler: list },
     { path: ['storage', 'xcode', 'scan'], handler: scanXcode },
+    { path: ['developer', 'audit'], handler: inventory },
+    { path: ['developer', 'worktrees', 'scan'], handler: inventory },
+    { path: ['developer', 'temp', 'scan'], handler: inventory },
+    { path: ['developer', 'caches'], handler: inventory },
   ],
 } satisfies AnkhRuntimeCommandProvider;
 
