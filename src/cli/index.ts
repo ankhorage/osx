@@ -2,6 +2,7 @@ import type { AnkhRuntimeCommandProvider } from '@ankhorage/ankh';
 import type { Capability } from '@ankhorage/contracts/capability';
 
 import packageJson from '../../package.json';
+import { analyze } from './commands/logs/analyze.js';
 import { audit } from './commands/security/audit.js';
 import { list } from './commands/security/controls/list.js';
 import { clean } from './commands/storage/clean.js';
@@ -45,6 +46,13 @@ const capabilities = [
     binding: { kind: 'action', bindableAs: ['target'] },
     label: 'List macOS security controls',
   },
+  {
+    id: 'osx.logs.analyze',
+    owner: '@ankhorage/osx',
+    access: ['invoke'],
+    binding: { kind: 'action', bindableAs: ['target'] },
+    label: 'Analyze macOS unified logs',
+  },
 ] as const satisfies readonly Capability[];
 
 const provider = {
@@ -79,6 +87,11 @@ const provider = {
       capability: 'osx.storage.scan',
       summary: 'Inspect Xcode Simulator runtimes.',
     },
+    {
+      path: ['logs', 'analyze'],
+      capability: 'osx.logs.analyze',
+      summary: 'Analyze local macOS unified logs.',
+    },
   ],
   handlers: [
     { path: ['storage', 'scan'], handler: scan },
@@ -87,6 +100,7 @@ const provider = {
     { path: ['security', 'audit'], handler: audit },
     { path: ['security', 'controls', 'list'], handler: list },
     { path: ['storage', 'xcode', 'scan'], handler: scanXcode },
+    { path: ['logs', 'analyze'], handler: analyze },
   ],
 } satisfies AnkhRuntimeCommandProvider;
 

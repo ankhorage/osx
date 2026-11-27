@@ -38,6 +38,9 @@ export {
   parseRuntimeInventoryAsync,
 } from './features/xcode-runtimes/adapters/outbound/createSimctlRuntimeScanner.js';
 export { scanXcodeRuntimesAsync } from './features/xcode-runtimes/composition/scanXcodeRuntimesAsync.js';
+export { analyzeLogText } from './features/log-analysis/application/analyzeLogText.js';
+export { analyzeLogFileAsync } from './features/log-analysis/adapters/outbound/analyzeLogFileAsync.js';
+export { analyzeMacosLogAsync } from './features/log-analysis/adapters/outbound/analyzeMacosLogAsync.js';
 export type {
   OrphanedApplicationEvidenceAvailability,
   OrphanedApplicationEvidenceSource,
@@ -88,3 +91,4 @@ export type {
   StorageOperations,
 } from './types/storage.js';
 export type { SimctlHost, XcodeRuntime } from './types/xcodeRuntime.js';
+export type { LogAnalysisEvent, LogAnalysisReport, LogAnalysisSignature } from './types/logAnalysis.js';
