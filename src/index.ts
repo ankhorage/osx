@@ -33,6 +33,8 @@ export { collectMacosSecurityPostureObservationsAsync } from './features/securit
 export { cleanStorageAsync } from './features/storage/application/cleanStorageAsync.js';
 export { scanOrphanedApplicationsAsync } from './features/storage/application/scanOrphanedApplicationsAsync.js';
 export { scanStorageAsync } from './features/storage/composition/scanStorageAsync.js';
+export { collectSystemDiagnosticsAsync } from './features/system-diagnostics/application/collectSystemDiagnosticsAsync.js';
+export { collectDefaultSystemDiagnosticsAsync } from './features/system-diagnostics/composition/collectDefaultSystemDiagnosticsAsync.js';
 export {
   createSimctlRuntimeScanner,
   parseRuntimeInventoryAsync,
@@ -87,4 +89,9 @@ export type {
   StorageExecution,
   StorageOperations,
 } from './types/storage.js';
+export type {
+  SystemDiagnosticEvidence,
+  SystemDiagnosticsHost,
+  SystemDiagnosticsReport,
+} from './types/systemDiagnostics.js';
 export type { SimctlHost, XcodeRuntime } from './types/xcodeRuntime.js';
