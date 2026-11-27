@@ -65,6 +65,15 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
       'scan',
     ]);
     expect(loaded.providers[0]?.manifest.commands.map((command) => command.path)).toContainEqual([
+      'backup',
+      'status',
+    ]);
+    expect(loaded.providers[0]?.manifest.commands.map((command) => command.path)).toContainEqual([
+      'backup',
+      'snapshots',
+      'list',
+    ]);
+    expect(loaded.providers[0]?.manifest.commands.map((command) => command.path)).toContainEqual([
       'storage',
       'orphans',
       'scan',
@@ -74,6 +83,12 @@ test('packed provider is discovered and loaded by the released Ankh API', async 
     ).not.toContainEqual(['storage', 'orphans', 'clean']);
     expect(loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id)).toContain(
       'osx.storage.orphans.scan',
+    );
+    expect(loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id)).toContain(
+      'osx.backup.status',
+    );
+    expect(loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id)).toContain(
+      'osx.backup.snapshots.list',
     );
     expect(
       loaded.providers[0]?.manifest.capabilities.map((capability) => capability.id),

@@ -2,6 +2,8 @@ import type { AnkhRuntimeCommandProvider } from '@ankhorage/ankh';
 import type { Capability } from '@ankhorage/contracts/capability';
 
 import packageJson from '../../package.json';
+import { status as backupStatus } from './commands/backup/status.js';
+import { list as listSnapshots } from './commands/backup/snapshots/list.js';
 import { audit } from './commands/security/audit.js';
 import { list } from './commands/security/controls/list.js';
 import { clean } from './commands/storage/clean.js';
@@ -10,6 +12,20 @@ import { scan } from './commands/storage/scan.js';
 import { scan as scanXcode } from './commands/storage/xcode/scan.js';
 
 const capabilities = [
+  {
+    id: 'osx.backup.status',
+    owner: '@ankhorage/osx',
+    access: ['invoke'],
+    binding: { kind: 'action', bindableAs: ['target'] },
+    label: 'Inspect Time Machine status',
+  },
+  {
+    id: 'osx.backup.snapshots.list',
+    owner: '@ankhorage/osx',
+    access: ['invoke'],
+    binding: { kind: 'action', bindableAs: ['target'] },
+    label: 'List APFS snapshots',
+  },
   {
     id: 'osx.storage.clean',
     owner: '@ankhorage/osx',
@@ -79,6 +95,16 @@ const provider = {
       capability: 'osx.storage.scan',
       summary: 'Inspect Xcode Simulator runtimes.',
     },
+    {
+      path: ['backup', 'status'],
+      capability: 'osx.backup.status',
+      summary: 'Inspect Time Machine status.',
+    },
+    {
+      path: ['backup', 'snapshots', 'list'],
+      capability: 'osx.backup.snapshots.list',
+      summary: 'List APFS snapshot counts.',
+    },
   ],
   handlers: [
     { path: ['storage', 'scan'], handler: scan },
@@ -87,6 +113,8 @@ const provider = {
     { path: ['security', 'audit'], handler: audit },
     { path: ['security', 'controls', 'list'], handler: list },
     { path: ['storage', 'xcode', 'scan'], handler: scanXcode },
+    { path: ['backup', 'status'], handler: backupStatus },
+    { path: ['backup', 'snapshots', 'list'], handler: listSnapshots },
   ],
 } satisfies AnkhRuntimeCommandProvider;
 
