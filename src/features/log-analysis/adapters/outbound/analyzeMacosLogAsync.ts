@@ -7,24 +7,24 @@ export async function analyzeMacosLogAsync(
   securityFiltered: boolean,
 ): Promise<LogAnalysisReport> {
   if (process.platform !== 'darwin') throw new Error('Host log collection is available only on macOS.');
-  const process = Bun.spawn({
+  const logProcess = Bun.spawn({
     cmd: ['log', 'show', '--style', 'json', '--last', scope],
     stdout: 'pipe',
     stderr: 'pipe',
   });
   try {
     const [report] = await Promise.all([
-      analyzeLogStreamAsync(process.stdout, {
+      analyzeLogStreamAsync(logProcess.stdout, {
         scope,
         securityFiltered,
         source: 'macos-log',
       }),
-      drainStderrAsync(process.stderr, process),
+      drainStderrAsync(logProcess.stderr, logProcess),
     ]);
-    if ((await process.exited) !== 0) throw new Error('macOS log command did not complete successfully.');
+    if ((await logProcess.exited) !== 0) throw new Error('macOS log command did not complete successfully.');
     return report;
   } catch (error) {
-    process.kill();
+    logProcess.kill();
     throw error;
   }
 }

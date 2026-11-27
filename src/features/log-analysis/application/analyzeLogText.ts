@@ -70,11 +70,11 @@ function parseRecord(record: string): LogAnalysisEvent | null {
     );
     return match?.groups
       ? eventFor(
-          match.groups.time,
-          match.groups.process,
+          match.groups.time ?? null,
+          match.groups.process ?? null,
           null,
           match.groups.level ?? null,
-          match.groups.message,
+          match.groups.message ?? null,
         )
       : null;
   }
