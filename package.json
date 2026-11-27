@@ -75,6 +75,34 @@
     "provider": "./dist/cli/index.js",
     "capabilities": [
       {
+        "id": "osx.backup.status",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "Inspect Time Machine status"
+      },
+      {
+        "id": "osx.backup.snapshots.list",
+        "owner": "@ankhorage/osx",
+        "access": [
+          "invoke"
+        ],
+        "binding": {
+          "kind": "action",
+          "bindableAs": [
+            "target"
+          ]
+        },
+        "label": "List APFS snapshots"
+      },
+      {
         "id": "osx.storage.clean",
         "owner": "@ankhorage/osx",
         "access": [

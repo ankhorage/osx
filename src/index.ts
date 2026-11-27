@@ -38,6 +38,12 @@ export {
   parseRuntimeInventoryAsync,
 } from './features/xcode-runtimes/adapters/outbound/createSimctlRuntimeScanner.js';
 export { scanXcodeRuntimesAsync } from './features/xcode-runtimes/composition/scanXcodeRuntimesAsync.js';
+export { collectBackupStatusAsync } from './features/backup/application/collectBackupStatusAsync.js';
+export { listApfsSnapshotsAsync } from './features/backup/application/listApfsSnapshotsAsync.js';
+export { collectDefaultBackupStatusAsync } from './features/backup/composition/collectDefaultBackupStatusAsync.js';
+export { listDefaultApfsSnapshotsAsync } from './features/backup/composition/listDefaultApfsSnapshotsAsync.js';
+export type { BackupHost, BackupCommandResult } from './features/backup/ports/backupHost.js';
+export type { ApfsSnapshotEvidence, BackupEvidenceAvailability, BackupStatusReport } from './types/backup.js';
 export type {
   OrphanedApplicationEvidenceAvailability,
   OrphanedApplicationEvidenceSource,
